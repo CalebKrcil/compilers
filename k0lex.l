@@ -36,7 +36,7 @@ SHEBANG   ^#![^\r\n]*
 
 {SHEBANG}  { /* Ignore */ }
 {WS}+      { /* Ignore */ }
-{NEWLINE}+ { yylineno++; }
+{NEWLINE}+ { yylineno++; return NL; }
 "//".*     { /* Ignore line comments */ }
 "#".*      { /* Ignore hash-based comments */ }
 
