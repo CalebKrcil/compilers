@@ -1,7 +1,7 @@
 %{
     #include <stdio.h>
     #include <stdlib.h>
-    
+    #include "tree.h"
     int yylex(void);
     void yyerror(const char *s);
 %}
