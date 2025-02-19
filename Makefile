@@ -10,6 +10,7 @@ MAIN_SRC = main.c
 LEX_OUT = k0lex.c
 YACC_OUT = k0gram.tab.c
 YACC_HEADER = k0gram.tab.h
+TREE_HEADER = tree.h
 
 OBJS = $(YACC_OUT:.c=.o) $(LEX_OUT:.c=.o) $(MAIN_SRC:.c=.o)
 
@@ -18,10 +19,10 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) -o $(TARGET) $(OBJS) -lfl -lm
 
-$(LEX_OUT): $(LEX_SRC) $(YACC_HEADER)
+$(LEX_OUT): $(LEX_SRC) $(YACC_HEADER) $(TREE_HEADER)
 	$(LEX) -o $(LEX_OUT) $(LEX_SRC)
 
-$(YACC_OUT) $(YACC_HEADER): $(YACC_SRC)
+$(YACC_OUT) $(YACC_HEADER): $(YACC_SRC) $(TREE_HEADER)
 	$(YACC) -d $(YACC_SRC)
 
 %.o: %.c
