@@ -37,6 +37,10 @@
 %left DIV 
 %left MOD
 
+%union {
+   struct tree *treeptr;
+}
+
 %nonassoc LOWER_THAN_ELSE
 %nonassoc ELSE
 
