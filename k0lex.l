@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "k0gram.tab.h"
+#include "tree.h"
 
 extern int yylineno;
 extern char *current_filename;  // Add this
