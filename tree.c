@@ -1,74 +1,104 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "tree.h"
 #include <stdarg.h>
 #include <string.h>
-#include "tree.h"
 
-// Allocate and initialize an internal node
-struct tree* alctree(int prodrule, const char* symbolname, int nkids, ...) {
-    struct tree* node = malloc(sizeof(struct tree));
-    if (!node) return NULL;
-    
-    node->prodrule = prodrule;
-    node->symbolname = strdup(symbolname);
-    node->nkids = nkids;
-    node->leaf = NULL;
-    
-    va_list ap;
-    va_start(ap, nkids);
-    for (int i = 0; i < nkids; i++) {
-        node->kids[i] = va_arg(ap, struct tree*);
+extern int yylineno;
+extern char *current_filename;
+
+/**
+ * Allocates a token and initializes it based on its category.
+ */
+struct token *alctoken(int category, char *text) {
+    struct token *tok = malloc(sizeof(struct token));
+    if (!tok) {
+        fprintf(stderr, "Memory allocation failed for token\n");
+        exit(EXIT_FAILURE);
     }
-    va_end(ap);
-    
-    return node;
-}
 
-// Allocate and initialize a leaf node
-struct tree* alcleaf(int category, const char* text, int lineno) {
-    struct tree* node = malloc(sizeof(struct tree));
-    if (!node) return NULL;
-    
-    node->prodrule = category;
-    node->symbolname = NULL;
-    node->nkids = 0;
-    
-    node->leaf = malloc(sizeof(struct token));
-    if (!node->leaf) {
-        free(node);
-        return NULL;
-    }
-    
-    node->leaf->category = category;
-    node->leaf->text = strdup(text);
-    node->leaf->lineno = lineno;
-    
-    return node;
-}
+    tok->category = category;
+    tok->text = strdup(text);
+    tok->lineno = yylineno;
+    tok->filename = strdup(current_filename);
 
-// Print information about a single node
-void printnode(struct tree* node) {
-    if (!node) return;
-    
-    if (node->nkids == 0 && node->leaf) {
-        printf("LEAF: category=%d, text='%s', line=%d\n",
-               node->leaf->category,
-               node->leaf->text,
-               node->leaf->lineno);
+    if (category == IntegerLiteral) {
+        tok->value.ival = atoi(text);
+    } else if (category == RealLiteral) {
+        tok->value.dval = atof(text);
+    } else if (category == CharacterLiteral || category == StringLiteral) {
+        tok->value.sval = strdup(text);
     } else {
-        printf("INTERNAL: rule=%d, symbol='%s', children=%d\n",
-               node->prodrule,
-               node->symbolname,
-               node->nkids);
+        tok->value.sval = NULL;
     }
+
+    return tok;
 }
 
-// Print entire tree (simple pre-order traversal)
-void tree_print(struct tree* root) {
-    if (!root) return;
+/**
+ * Frees memory allocated for a token.
+ */
+void freetoken(struct token *t) {
+    if (!t) return;
+    free(t->text);
+    free(t->filename);
+    if (t->category == CharacterLiteral || t->category == StringLiteral) {
+        free(t->value.sval);
+    }
+    free(t);
+}
+
+/**
+ * Allocates a new tree node with the given production rule, symbol name,
+ * and child nodes.
+ */
+struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
+    struct tree *t = malloc(sizeof(struct tree));
+    if (!t) {
+        fprintf(stderr, "Memory allocation failed for tree node\n");
+        exit(EXIT_FAILURE);
+    }
+
+    t->prodrule = prodrule;
+    t->symbolname = symbolname;
+    t->nkids = nkids;
+    t->leaf = NULL;
+
+    va_list args;
+    va_start(args, nkids);
+    for (int i = 0; i < nkids; i++) {
+        t->kids[i] = va_arg(args, struct tree *);
+    }
+    va_end(args);
+
+    return t;
+}
+
+/**
+ * Frees memory allocated for a syntax tree.
+ */
+void freetree(struct tree *t) {
+    if (!t) return;
+    for (int i = 0; i < t->nkids; i++) {
+        freetree(t->kids[i]);
+    }
+    if (t->leaf) {
+        freetoken(t->leaf);
+    }
+    free(t);
+}
+
+/**
+ * Recursively prints the syntax tree.
+ */
+void printtree(struct tree *t, int depth) {
+    if (!t) return;
+    for (int i = 0; i < depth; i++) printf("  ");
     
-    printnode(root);
-    for (int i = 0; i < root->nkids; i++) {
-        tree_print(root->kids[i]);
+    if (t->leaf) {
+        printf("Leaf: %s (Line %d)\n", t->leaf->text, t->leaf->lineno);
+    } else {
+        printf("Node: %s\n", t->symbolname);
+        for (int i = 0; i < t->nkids; i++) {
+            printtree(t->kids[i], depth + 1);
+        }
     }
 }
