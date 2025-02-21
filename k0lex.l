@@ -49,7 +49,6 @@ SHEBANG   ^#![^\r\n]*
     return 0;
 }
 
-/* Operators in k0 */
 ","           { update_last_token(","); return alctoken(COMMA, yytext); }
 "("           { update_last_token("("); return alctoken(LPAREN, yytext); }
 ")"           { update_last_token(")"); return alctoken(RPAREN, yytext); }
@@ -86,7 +85,6 @@ SHEBANG   ^#![^\r\n]*
 ".."          { update_last_token(".."); return alctoken(RANGE, yytext); }
 "..<"         { update_last_token("..<"); return alctoken(RANGE_UNTIL, yytext); }
 
-/* Operators not in k0? */
 "..."         { update_last_token("..."); return alctoken(RESERVED, yytext); }
 "*="          { update_last_token("*="); return alctoken(MULT_ASSIGNMENT, yytext); }
 "/="          { update_last_token("/="); return alctoken(DIV_ASSIGNMENT, yytext); }
@@ -104,7 +102,6 @@ SHEBANG   ^#![^\r\n]*
 "as\?"        { update_last_token("as?"); return alctoken(AS_SAFE, yytext); }
 "&"           { update_last_token("&"); return alctoken(AMP, yytext); }
 
-/* Keywords in k0 */
 "break"         { update_last_token("break"); return alctoken(BREAK, yytext); }
 "continue"      { update_last_token("continue"); return alctoken(CONTINUE, yytext); }
 "do"            { update_last_token("do"); return alctoken(DO, yytext); }
@@ -124,7 +121,6 @@ SHEBANG   ^#![^\r\n]*
 "import"        { update_last_token("import"); return alctoken(IMPORT, yytext); }
 "const"         { update_last_token("const"); return alctoken(CONST, yytext); }
 
-/* Keywords not in k0 */
 "return@"       { update_last_token("return@"); return alctoken(RETURN_AT, yytext); }
 "continue@"     { update_last_token("continue@"); return alctoken(CONTINUE_AT, yytext); }
 "break@"        { update_last_token("break@"); return alctoken(BREAK_AT, yytext); }
@@ -142,7 +138,6 @@ SHEBANG   ^#![^\r\n]*
 "package"       { update_last_token("package"); return alctoken(PACKAGE, yytext); }
 "class"         { update_last_token("class"); return alctoken(CLASS, yytext); }
 "interface"     { update_last_token("interface"); return alctoken(INTERFACE, yytext); }
-"fun"           { update_last_token("fun"); return alctoken(FUN, yytext); }
 "object"        { update_last_token("object"); return alctoken(OBJECT, yytext); }
 "typealias"     { update_last_token("typealias"); return alctoken(TYPE_ALIAS, yytext); }
 "constructor"   { update_last_token("constructor"); return alctoken(CONSTRUCTOR, yytext); }
@@ -193,7 +188,6 @@ SHEBANG   ^#![^\r\n]*
 
 {NUMBER}      { update_last_token(yytext); return alctoken(IntegerLiteral, yytext); }
 {FLOAT}       { update_last_token(yytext); return alctoken(RealLiteral, yytext); }
-{BIN}         { update_last_token(yytext); return alctoken(BinLiteral, yytext); }
 {STRING}      { update_last_token(yytext); return alctoken(CharacterLiteral, yytext); }
 {ID}          { update_last_token(yytext); return alctoken(Identifier, yytext); }
 

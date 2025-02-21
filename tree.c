@@ -1,4 +1,5 @@
 #include "tree.h"
+#include "ytab.h"
 #include <stdarg.h>
 #include <string.h>
 
@@ -8,7 +9,7 @@ extern char *current_filename;
 /**
  * Allocates a token and initializes it based on its category.
  */
-struct token *alctoken(int category, char *text) {
+int alctoken(int category, char *text) {
     struct token *tok = malloc(sizeof(struct token));
     if (!tok) {
         fprintf(stderr, "Memory allocation failed for token\n");
@@ -24,13 +25,13 @@ struct token *alctoken(int category, char *text) {
         tok->value.ival = atoi(text);
     } else if (category == RealLiteral) {
         tok->value.dval = atof(text);
-    } else if (category == CharacterLiteral || category == StringLiteral) {
+    } else if (category == CharacterLiteral) {
         tok->value.sval = strdup(text);
     } else {
         tok->value.sval = NULL;
     }
 
-    return tok;
+    return category;
 }
 
 /**
@@ -40,7 +41,7 @@ void freetoken(struct token *t) {
     if (!t) return;
     free(t->text);
     free(t->filename);
-    if (t->category == CharacterLiteral || t->category == StringLiteral) {
+    if (t->category == CharacterLiteral) {
         free(t->value.sval);
     }
     free(t);

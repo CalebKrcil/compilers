@@ -26,6 +26,7 @@ struct tree {
     struct token *leaf;
 };
 
+int alctoken(int category, char *text);
 struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
