@@ -244,7 +244,7 @@ primary_expression:
     | NullLiteral { $$ = alctree(NullLiteral, "NullLiteral", 1, $1); }
     | CharacterLiteral { $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); }
     | Identifier { $$ = alctree(Identifier, "Identifier", 1, $1); }
-    | functionCall { $$ = alctree(0, "functionCall", 1, $1); }
+    | functionCall { $$ = $1; }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
 
@@ -255,7 +255,7 @@ functionCall:
 
 functionCallArguments:
     /* epsilon */ { $$ = NULL; }
-    | expression { $$ = $1; }
+    | expression { $$ = alctree(0, "functionCallArguments", 1, $1); }
     | functionCallArguments COMMA expression { $$ = alctree(0, "functionCallArguments", 2, $1, $3); }
     ;
 
