@@ -233,20 +233,21 @@ additive_expression:
 
 multiplicative_expression:
     primary_expression { $$ = $1; }
-    | multiplicative_expression MULT primary_expression { $$ = alctree(0, "multiplicative_expression_expression", 2, $1, $3); }
-    | multiplicative_expression DIV primary_expression { $$ = alctree(0, "multiplicative_expression_expression", 2, $1, $3); }
-    | multiplicative_expression MOD primary_expression { $$ = alctree(0, "multiplicative_expression_expression", 2, $1, $3); }
+    | multiplicative_expression MULT primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    | multiplicative_expression DIV primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    | multiplicative_expression MOD primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
     ;
 
 primary_expression:
-    IntegerLiteral { $$ = $1; }
-    | BooleanLiteral { $$ = $1; }
-    | NullLiteral { $$ = $1; }
-    | CharacterLiteral { $$ = $1; }
-    | Identifier { $$ = $1; }
-    | functionCall { $$ = $1; }
+    IntegerLiteral { $$ = alctree(IntegerLiteral, "IntegerLiteral", 1, $1); }
+    | BooleanLiteral { $$ = alctree(BooleanLiteral, "BooleanLiteral", 1, $1); }
+    | NullLiteral { $$ = alctree(NullLiteral, "NullLiteral", 1, $1); }
+    | CharacterLiteral { $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); }
+    | Identifier { $$ = alctree(Identifier, "Identifier", 1, $1); }
+    | functionCall { $$ = alctree(0, "functionCall", 1, $1); }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
+
 
 functionCall:
     Identifier LPAREN functionCallArguments RPAREN { $$ = alctree(0, "functionCall", 2, $1, $3); }
