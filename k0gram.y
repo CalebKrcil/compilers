@@ -112,7 +112,7 @@ type:
 // Function declaration
 functionDeclaration:
     FUN Identifier functionValueParameters returnType_section functionBody { $$ = alctree(FUN, "functionDeclaration", 4, $2, $3, $4, $5); }
-    | FUN Identifier functionValueParameters functionBody { $$ = alctree(FUN, "functionDeclaration", 2, $2, $3); }
+    | FUN Identifier functionValueParameters functionBody { $$ = alctree(FUN, "functionDeclaration", 3, $2, $3, $4); }
     ;
 
 functionValueParameters:
