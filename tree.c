@@ -1,21 +1,29 @@
 #include "tree.h"
+#include "k0gram.tab.h"
 #include "ytab.h"
 #include <stdarg.h>
 #include <string.h>
 
 extern int yylineno;
 extern char *current_filename;
+extern YYSTYPE yylval;
 
 /**
  * Allocates a token and initializes it based on its category.
  */
 int alctoken(int category, char *text) {
-    struct token *tok = malloc(sizeof(struct token));
-    if (!tok) {
-        fprintf(stderr, "Memory allocation failed for token\n");
+    yylval.treeptr = malloc(sizeof(struct tree));
+    if (!yylval.treeptr) {
+        fprintf(stderr, "Memory allocation failed for tree node\n");
         exit(EXIT_FAILURE);
     }
 
+    yylval.treeptr->prodrule = category;
+    yylval.treeptr->symbolname = strdup(text);
+    yylval.treeptr->nkids = 0;
+    yylval.treeptr->leaf = malloc(sizeof(struct token));
+
+    struct token *tok = yylval.treeptr->leaf;
     tok->category = category;
     tok->text = strdup(text);
     tok->lineno = yylineno;
@@ -33,6 +41,7 @@ int alctoken(int category, char *text) {
 
     return category;
 }
+
 
 /**
  * Frees memory allocated for a token.
@@ -92,11 +101,23 @@ void freetree(struct tree *t) {
  */
 void printtree(struct tree *t, int depth) {
     if (!t) return;
+
+    // Print indentation based on depth
     for (int i = 0; i < depth; i++) printf("  ");
-    
+
     if (t->leaf) {
-        printf("Leaf: %s (Line %d)\n", t->leaf->text, t->leaf->lineno);
+        // Print different representations for literals
+        if (t->leaf->category == IntegerLiteral) {
+            printf("Leaf: IntegerLiteral - %d\n", t->leaf->value.ival);
+        } else if (t->leaf->category == RealLiteral) {
+            printf("Leaf: RealLiteral - %lf\n", t->leaf->value.dval);
+        } else if (t->leaf->category == CharacterLiteral) {
+            printf("Leaf: CharacterLiteral - '%s'\n", t->leaf->value.sval);
+        } else {
+            printf("Leaf: %s - %s\n", t->symbolname, t->leaf->text);
+        }
     } else {
+        // Print node names
         printf("Node: %s\n", t->symbolname);
         for (int i = 0; i < t->nkids; i++) {
             printtree(t->kids[i], depth + 1);

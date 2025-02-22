@@ -9,6 +9,7 @@ extern int yylineno;
 extern char *current_filename;  // Add this
 extern void update_last_token(const char *token_text);  // Add this
 int yylex();
+extern YYSTYPE yylval;
 void yyerror(const char *s);
 
 int comment_depth = 0;
