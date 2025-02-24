@@ -227,6 +227,10 @@ expression:
 
 additive_expression:
     multiplicative_expression { $$ = $1; }
+    | additive_expression COMMA additive_expression {
+        fprintf(stderr,"Error: Comma operator is not allowed in k0.");
+        return(1);
+    }
     | additive_expression ADD multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
     | additive_expression SUB multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
     ;
@@ -244,6 +248,7 @@ primary_expression:
     | NullLiteral { $$ = alctree(NullLiteral, "NullLiteral", 1, $1); }
     | CharacterLiteral { $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); }
     | Identifier { $$ = alctree(Identifier, "Identifier", 1, $1); }
+    | Identifier DOT primary_expression { $$ = alctree(0, "qualifiedName", 2, $1, $3); }
     | functionCall { $$ = $1; }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
