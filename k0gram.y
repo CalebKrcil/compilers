@@ -64,13 +64,7 @@
 
 nl_opt:
     /* epsilon */
-    | nl
-    | nl_opt nl
-    ;
-
-nl:
-    NL
-    | nl NL
+    | NL nl_opt
     ;
 
 // Program structure
@@ -135,12 +129,12 @@ functionBody:
     ;
 
 block:
-    LCURL nl_opt statements nl_opt RCURL { $$ = alctree(0, "block", 1, $3); }
+    LCURL nl_opt RCURL {$$ = NULL;}
+    | LCURL statements nl_opt RCURL { $$ = alctree(0, "block", 1, $2); }
     ;
 
 statements:
-    /* epsilon */ { $$ = NULL; }
-    | nl_opt statement nl_opt { $$ = $2; }
+    nl_opt statement nl_opt { $$ = $2; }
     | statements nl_opt statement { $$ = alctree(0, "statements", 2, $1, $3); }
     ;
 
@@ -190,7 +184,6 @@ forInit:
 
 forUpdate:
     assignment { $$ = $1; }
-    | unaryExpression {$$ = $1; }
     | /*epsilon */ {$$ = NULL; }
     ;
 
@@ -220,18 +213,19 @@ ifStatement:
     ;
 
 boolExpression:
-    BooleanLiteral {$$=$1;}
-    | expression nl_opt EQEQ nl_opt expression { $$ = alctree(EQEQ, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt EXCL_EQ nl_opt expression { $$ = alctree(EXCL_EQ, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt LANGLE nl_opt expression { $$ = alctree(LANGLE, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt RANGLE nl_opt expression { $$ = alctree(RANGLE, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt LE nl_opt expression { $$ = alctree(LE, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt GE nl_opt expression { $$ = alctree(GE, "booleanExpression", 2, $1, $5); }
-    | expression nl_opt CONJ nl_opt expression { $$ = alctree(CONJ, "booleanExpression", 2, $1, $5); } // &&
-    | expression nl_opt DISJ nl_opt expression { $$ = alctree(DISJ, "booleanExpression", 2, $1, $5); } // ||
-    | EXCL_NO_WS nl_opt expression { $$ = alctree(EXCL_NO_WS, "booleanExpression", 1, $3); } // !
-    | LPAREN nl_opt boolExpression nl_opt RPAREN { $$ = $3; } // Parenthesized conditions
+    expression { $$ = $1; }
+    | boolExpression EQEQ boolExpression { $$ = alctree(EQEQ, "booleanExpression", 2, $1, $3); }
+    | boolExpression EXCL_EQ boolExpression { $$ = alctree(EXCL_EQ, "booleanExpression", 2, $1, $3); }
+    | boolExpression LANGLE boolExpression { $$ = alctree(LANGLE, "booleanExpression", 2, $1, $3); }
+    | boolExpression RANGLE boolExpression { $$ = alctree(RANGLE, "booleanExpression", 2, $1, $3); }
+    | boolExpression LE boolExpression { $$ = alctree(LE, "booleanExpression", 2, $1, $3); }
+    | boolExpression GE boolExpression { $$ = alctree(GE, "booleanExpression", 2, $1, $3); }
+    | boolExpression CONJ boolExpression { $$ = alctree(CONJ, "booleanExpression", 2, $1, $3); }
+    | boolExpression DISJ boolExpression { $$ = alctree(DISJ, "booleanExpression", 2, $1, $3); }
+    | EXCL_NO_WS boolExpression { $$ = alctree(EXCL_NO_WS, "booleanExpression", 1, $2); }
+    | LPAREN boolExpression RPAREN { $$ = $3; }
     ;
+
 whenStatement:
     WHEN LPAREN expression RPAREN LCURL nl_opt whenBranchList nl_opt RCURL {
         $$ = alctree(WHEN, "whenStatement", 2, $3, $7);
@@ -276,7 +270,6 @@ returnType_section:
 // Expressions
 expression:
     additive_expression nl_opt { $$ = $1; }
-    | boolExpression { $$ = $1; }
     ;
 
 additive_expression:
