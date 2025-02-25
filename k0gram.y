@@ -34,11 +34,11 @@
 %type <treeptr> propertyDeclaration type functionDeclaration functionValueParameters
 %type <treeptr> functionParameterList_opt functionValueParameter functionBody
 %type <treeptr> block statements statement loopStatement forStatement whileStatement
-%type <treeptr> doWhileStatement controlStructureBody forControl assignment ifStatement
+%type <treeptr> doWhileStatement controlStructureBody assignment ifStatement
 %type <treeptr> variableDeclaration multiVariableDeclaration variableDeclarationList
 %type <treeptr> returnType_section expression additive_expression multiplicative_expression
-%type <treeptr> primary_expression functionCall functionCallArguments annotation_opt
-%type <treeptr> annotation returnStatement typeAlias
+%type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
+%type <treeptr> unaryExpression boolExpression returnStatement typeAlias whenStatement whenBranchList whenBranch
 
 %start program
 
@@ -47,21 +47,20 @@
 %left MULT 
 %left DIV 
 %left MOD
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE_IF
+%right ASSIGNMENT  
+%precedence FUNCTION_CALL_ARGS 
+%precedence EXPR  
+%precedence LOWER_THAN_FUNCTION_CALL_ARGS
 
 %union {
    struct tree *treeptr;
 }
 
-%nonassoc LOWER_THAN_ELSE
-%nonassoc ELSE
+
 
 %%
-
-// Basic separator rules
-semi:
-    SEMICOLON nl_opt
-    | nl nl_opt
-    ;
 
 nl_opt:
     /* epsilon */
@@ -76,15 +75,15 @@ nl:
 
 // Program structure
 program:
-    topLevelObjectList{
-        root = $1;
+    nl_opt topLevelObjectList nl_opt{
+        root = $2;
         printtree(root, 0);
     }
     ;
 
 topLevelObjectList:
     topLevelObject { $$ = $1; }
-    | topLevelObjectList topLevelObject { $$ = alctree(0, "topLevelObjectList", 2, $1, $2); }
+    | topLevelObjectList nl_opt topLevelObject { $$ = alctree(0, "topLevelObjectList", 2, $1, $3); }
     ;
 
 topLevelObject:
@@ -100,12 +99,12 @@ declaration:
 
 // Property declaration
 propertyDeclaration:
-    PROPERTY Identifier COLON type semi { $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); }
+    PROPERTY Identifier COLON type nl_opt { $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); }
     ;
 
 // Type definition
 type:
-    Identifier { $$ = $1; }
+    Identifier { $$ = alctree(0, "type", 1, $1); }
     | Identifier LANGLE type RANGLE { $$ = alctree(0, "type", 2, $1, $3); }
     ;
 
@@ -136,22 +135,23 @@ functionBody:
     ;
 
 block:
-    LCURL statements RCURL { $$ = alctree(0, "block", 1, $2); }
+    LCURL nl_opt statements nl_opt RCURL { $$ = alctree(0, "block", 1, $3); }
     ;
 
 statements:
     /* epsilon */ { $$ = NULL; }
-    | statement nl_opt { $$ = $1; }
+    | nl_opt statement nl_opt { $$ = $2; }
     | statements nl_opt statement { $$ = alctree(0, "statements", 2, $1, $3); }
     ;
 
 statement:
-    expression semi { $$ = $1; }
-    | declaration { $$ = $1; }
-    | assignment semi { $$ = $1; }
-    | loopStatement { $$ = $1; }
-    | ifStatement { $$ = $1; }
-    | returnStatement semi { $$ = $1; }
+    expression nl_opt { $$ = $1; }
+    | declaration nl_opt { $$ = $1; }
+    | assignment nl_opt { $$ = $1; }
+    | loopStatement nl_opt { $$ = $1; }
+    | ifStatement nl_opt { $$ = $1; }
+    | whenStatement nl_opt {$$ = $1; }
+    | returnStatement nl_opt { $$ = $1; }
     ;
 
 // Loop Statements
@@ -162,28 +162,43 @@ loopStatement:
     ;
 
 forStatement:
-    FOR nl_opt LPAREN annotation_opt forControl RPAREN nl_opt controlStructureBody { $$ = alctree(FOR, "forStatement", 3, $4, $5, $8); }
+    FOR LPAREN nl_opt forInit SEMICOLON boolExpression SEMICOLON forUpdate RPAREN controlStructureBody nl_opt
+        { $$ = alctree(FOR, "forStatement", 4, $4, $6, $8, $10); }
+    | FOR LPAREN Identifier IN expression RANGE expression RPAREN controlStructureBody nl_opt
+        { $$ = alctree(FOR, "forStatementKotlinRange", 4, $3, $5, $7, $9); }
     ;
 
+
 whileStatement:
-    WHILE nl_opt LPAREN expression RPAREN nl_opt controlStructureBody { $$ = alctree(WHILE, "whileStatement", 2, $4, $7); }
-    | WHILE nl_opt LPAREN expression RPAREN nl_opt SEMICOLON { $$ = alctree(WHILE, "whileStatement", 1, $4); }
+    WHILE nl_opt LPAREN boolExpression RPAREN nl_opt controlStructureBody { $$ = alctree(WHILE, "whileStatement", 2, $4, $7); }
     ;
 
 doWhileStatement:
-    DO nl_opt controlStructureBody nl_opt WHILE nl_opt LPAREN expression RPAREN { $$ = alctree(DO, "doWhileStatement", 2, $3, $8); }
+    DO nl_opt controlStructureBody nl_opt WHILE nl_opt LPAREN boolExpression RPAREN { $$ = alctree(DO, "doWhileStatement", 2, $3, $8); }
     ;
 
 // Control structure components
 controlStructureBody:
-    block { $$ = $1; }
-    | statement { $$ = $1; }
+    block nl_opt { $$ = $1; }
+    | statement nl_opt { $$ = $1; }
     ;
 
-forControl:
-    variableDeclaration IN expression { $$ = alctree(0, "forControl", 2, $1, $3); }
-    | multiVariableDeclaration IN expression { $$ = alctree(0, "forControl", 2, $1, $3); }
-    | Identifier IN expression { $$ = alctree(0, "forControl", 2, $1, $3); }
+forInit:
+    assignment { $$ = $1; }
+    | /* epsilon */ { $$ = NULL; }
+    ;
+
+forUpdate:
+    assignment { $$ = $1; }
+    | unaryExpression {$$ = $1; }
+    | /*epsilon */ {$$ = NULL; }
+    ;
+
+unaryExpression:
+    INCR Identifier { $$ = alctree(INCR, "preIncrement", 1, $2); }  
+    | DECR Identifier { $$ = alctree(DECR, "preDecrement", 1, $2); }  
+    | Identifier INCR { $$ = alctree(INCR, "postIncrement", 1, $1); }  
+    | Identifier DECR { $$ = alctree(DECR, "postDecrement", 1, $1); }
     ;
 
 // Assignments
@@ -191,20 +206,58 @@ assignment:
     Identifier ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); }
     | Identifier ADD_ASSIGNMENT expression { $$ = alctree(ADD_ASSIGNMENT, "addAssignment", 2, $1, $3); }
     | Identifier SUB_ASSIGNMENT expression { $$ = alctree(SUB_ASSIGNMENT, "subAssignment", 2, $1, $3); }
-    | variableDeclaration ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); }
+    | variableDeclaration { $$ = alctree(ASSIGNMENT, "assignment", 1, $1); }
     | multiVariableDeclaration ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); }
+    | unaryExpression { $$ = $1; }
     ;
 
 // Control structures
 ifStatement:
-    IF LPAREN expression RPAREN controlStructureBody %prec LOWER_THAN_ELSE { $$ = alctree(IF, "ifStatement", 2, $3, $5); }
-    | IF LPAREN expression RPAREN controlStructureBody ELSE controlStructureBody { $$ = alctree(IF, "ifStatement", 3, $3, $5, $7); }
+    IF LPAREN boolExpression RPAREN nl_opt controlStructureBody nl_opt %prec LOWER_THAN_ELSE
+        { $$ = alctree(IF, "ifStatement", 2, $3, $6); }
+    | IF LPAREN boolExpression RPAREN nl_opt controlStructureBody nl_opt ELSE nl_opt controlStructureBody nl_opt 
+        { $$ = alctree(IF, "ifElseStatement", 3, $3, $6, $10); }    
+    ;
+
+boolExpression:
+    BooleanLiteral {$$=$1;}
+    | expression nl_opt EQEQ nl_opt expression { $$ = alctree(EQEQ, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt EXCL_EQ nl_opt expression { $$ = alctree(EXCL_EQ, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt LANGLE nl_opt expression { $$ = alctree(LANGLE, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt RANGLE nl_opt expression { $$ = alctree(RANGLE, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt LE nl_opt expression { $$ = alctree(LE, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt GE nl_opt expression { $$ = alctree(GE, "booleanExpression", 2, $1, $5); }
+    | expression nl_opt CONJ nl_opt expression { $$ = alctree(CONJ, "booleanExpression", 2, $1, $5); } // &&
+    | expression nl_opt DISJ nl_opt expression { $$ = alctree(DISJ, "booleanExpression", 2, $1, $5); } // ||
+    | EXCL_NO_WS nl_opt expression { $$ = alctree(EXCL_NO_WS, "booleanExpression", 1, $3); } // !
+    | LPAREN nl_opt boolExpression nl_opt RPAREN { $$ = $3; } // Parenthesized conditions
+    ;
+whenStatement:
+    WHEN LPAREN expression RPAREN LCURL nl_opt whenBranchList nl_opt RCURL {
+        $$ = alctree(WHEN, "whenStatement", 2, $3, $7);
+    }
+    ;
+
+whenBranchList:
+    whenBranch {$$ = $1; }
+    | whenBranchList nl_opt whenBranch { $$ = alctree(0, "whenBranches", 2, $1, $3); }
+    ;
+
+whenBranch:
+    expression ARROW controlStructureBody { $$ = alctree(0, "whenBranch", 2, $1, $3); }
+    | ELSE ARROW controlStructureBody { $$ = alctree(ELSE, "whenBranchElse", 1, $3); }
     ;
 
 // Variable declarations
 variableDeclaration:
-    VAL nl_opt Identifier { $$ = $1; }
-    | VAR nl_opt Identifier { $$ = $1; }
+    VAL Identifier nl_opt { $$ = alctree(VAL, "variableDeclaration", 1, $2); }
+    | VAR Identifier nl_opt { $$ = alctree(VAR, "variableDeclaration", 1, $2); }
+    | VAL Identifier COLON type nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
+    | VAR Identifier COLON type nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
+    | VAL Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
+    | VAR Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
+    | VAL Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6); }
+    | VAR Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6); }
     ;
 
 multiVariableDeclaration:
@@ -222,12 +275,13 @@ returnType_section:
 
 // Expressions
 expression:
-    additive_expression { $$ = $1; }
+    additive_expression nl_opt { $$ = $1; }
+    | boolExpression { $$ = $1; }
     ;
 
 additive_expression:
     multiplicative_expression { $$ = $1; }
-    | additive_expression COMMA additive_expression {
+    | additive_expression COMMA additive_expression LOWER_THAN_FUNCTION_CALL_ARGS {
         fprintf(stderr,"Error: Comma operator is not allowed in k0.");
         return(1);
     }
@@ -255,28 +309,19 @@ primary_expression:
 
 
 functionCall:
-    Identifier LPAREN functionCallArguments RPAREN { $$ = alctree(0, "functionCall", 2, $1, $3); }
+    Identifier LPAREN functionCallArguments RPAREN nl_opt { $$ = alctree(0, "functionCall", 2, $1, $3); }
     ;
 
 functionCallArguments:
     /* epsilon */ { $$ = NULL; }
-    | expression { $$ = alctree(0, "functionCallArguments", 1, $1); }
+    | expression{ $$ = alctree(0, "functionCallArguments", 1, $1); }
     | functionCallArguments COMMA expression { $$ = alctree(0, "functionCallArguments", 2, $1, $3); }
     ;
 
-// Other components
-annotation_opt:
-    /* epsilon */ { $$ = NULL; }
-    | annotation { $$ = $1; }
-    ;
-
-annotation:
-    AT_NO_WS Identifier { $$ = $2; }
-    | AT_PRE_WS Identifier { $$ = $2; }
-    ;
 
 returnStatement:
-    RETURN expression { $$ = $2; }
+    RETURN expression { $$ = $2; }|
+    RETURN {$$ = $1;}
     ;
 
 typeAlias:

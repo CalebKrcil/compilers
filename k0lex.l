@@ -25,7 +25,7 @@ int string_pos = 0;
 %option nounput
 
 WS        [ \t\f]
-NEWLINE   \n|\r\n?
+NEWLINE   \r\n|\n|\r
 ID        [a-zA-Z_][a-zA-Z0-9_]*
 NUMBER    -?[0-9]+
 FLOAT     -?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)?
@@ -144,7 +144,7 @@ SHEBANG   ^#![^\r\n]*
 "continue@"     { update_last_token("continue@"); return alctoken(CONTINUE_AT, yytext); }
 "break@"        { update_last_token("break@"); return alctoken(BREAK_AT, yytext); }
 "override"      { update_last_token("override"); return alctoken(OVERRIDE, yytext); }
-
+"in"            { update_last_token("in"); return alctoken(IN, yytext); }
 {NUMBER}      { update_last_token(yytext); return alctoken(IntegerLiteral, yytext); }
 {FLOAT}       { update_last_token(yytext); return alctoken(RealLiteral, yytext); }
 {STRING}      { update_last_token(yytext); return alctoken(CharacterLiteral, yytext); }

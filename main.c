@@ -73,7 +73,7 @@ void yyerror(const char *s) {
         if (strcmp(last_token, "fun") == 0) {
             fprintf(stderr, "Note: Function declarations require a name, parameter list, and body\n");
         }
-        else if (strcmp(last_token, "BITWISE")) {
+        else if (strcmp(last_token, "BITWISE") == 0) {
             fprintf(stderr, "Note: Bitwise Unsupported in K0\n");
         }
         else{
