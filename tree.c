@@ -87,12 +87,26 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
  */
 void freetree(struct tree *t) {
     if (!t) return;
+
+    // Free children recursively
     for (int i = 0; i < t->nkids; i++) {
         freetree(t->kids[i]);
+        t->kids[i] = NULL;  // Avoid dangling pointers
     }
+
+    // Free the token if it's a leaf
     if (t->leaf) {
         freetoken(t->leaf);
+        t->leaf = NULL;
     }
+
+    // Free symbol name (strdup'd string)
+    if (t->symbolname) {
+        free(t->symbolname);
+        t->symbolname = NULL;
+    }
+
+    // Free the tree node itself
     free(t);
 }
 
