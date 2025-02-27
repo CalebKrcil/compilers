@@ -122,13 +122,13 @@ void printtree(struct tree *t, int depth) {
     if (t->leaf) {
         // Print different representations for literals
         if (t->leaf->category == IntegerLiteral) {
-            printf("Leaf: IntegerLiteral - %d\n", t->leaf->value.ival);
+            printf("Leaf: IntegerLiteral - %d, Integer code: %d\n", t->leaf->value.ival, t->leaf->category);
         } else if (t->leaf->category == RealLiteral) {
-            printf("Leaf: RealLiteral - %lf\n", t->leaf->value.dval);
+            printf("Leaf: RealLiteral - %lf, Integer code: %d\n", t->leaf->value.dval, t->leaf->category);
         } else if (t->leaf->category == CharacterLiteral) {
-            printf("Leaf: CharacterLiteral - '%s'\n", t->leaf->value.sval);
+            printf("Leaf: CharacterLiteral - '%s', Integer code: %d\n", t->leaf->value.sval, t->leaf->category);
         } else {
-            printf("Leaf: %s - %s\n", t->symbolname, t->leaf->text);
+            printf("Leaf: %s - %s, Integer code: %d\n", t->symbolname, t->leaf->text, t->leaf->category);
         }
     } else {
         // Print node names
