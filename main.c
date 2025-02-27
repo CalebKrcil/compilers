@@ -199,14 +199,15 @@ void print_tokens() {
 void free_tokens() {
     struct tokenlist *current = head;
     while (current) {
+        struct tokenlist *next = current->next;
         free(current->t->text);
         free(current->t->filename);
-        if (current->t->sval) free(current->t->sval);
+        if (current->t->category == CharacterLiteral) free(current->t->sval);
         free(current->t);
-        struct tokenlist *next = current->next;
         free(current);
         current = next;
     }
+    head = tail = NULL;  // Ensure the list is reset
 }
 
 int main(int argc, char *argv[]) {
