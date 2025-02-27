@@ -38,13 +38,12 @@ struct tokenlist {
 struct tokenlist *head = NULL;
 struct tokenlist *tail = NULL;
 
-// Enhanced error reporting function
 void yyerror(const char *s) {
     error_count++;
     char *near_text = (*yytext != '\0') ? yytext : "end of file";
     fprintf(stderr, "\nError #%d at line %d: %s\n", error_count, yylineno, s);
     fprintf(stderr, "Near token: '%s'\n", near_text);
-    
+
     // Print the line where the error occurred
     FILE *f = fopen(current_filename, "r");
     if (f) {
@@ -65,20 +64,25 @@ void yyerror(const char *s) {
         }
         fclose(f);
     }
-    
+
     // Provide hint based on error type
     if (strstr(s, "syntax error")) {
-        
-        // You can add more specific hints based on the last valid token
+        // More specific hints
         if (strcmp(last_token, "fun") == 0) {
             fprintf(stderr, "Note: Function declarations require a name, parameter list, and body\n");
         }
         else if (strcmp(last_token, "BITWISE") == 0) {
             fprintf(stderr, "Note: Bitwise Unsupported in K0\n");
         }
-        else{
+        else {
             fprintf(stderr, "Hint: Check for missing semicolons, brackets, or incorrect token ordering\n");
         }
+
+        // Return exit code 2 for syntax errors
+        exit(2);
+    } else {
+        // Return exit code 1 for lexical errors
+        exit(1);
     }
 }
 
