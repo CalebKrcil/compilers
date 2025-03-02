@@ -19,6 +19,7 @@ struct token {
 };
 
 struct tree {
+    int id;
     int prodrule;
     char *symbolname;
     int nkids;
@@ -30,5 +31,6 @@ int alctoken(int category, char *text);
 struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
+void print_graph(struct tree *t, char *filename);
 
 #endif

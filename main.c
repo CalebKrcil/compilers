@@ -4,6 +4,7 @@
 #include <math.h>
 #include <ctype.h>
 #include "k0gram.tab.h"
+#include "tree.h"
 #define EXTENSION ".kt"
 
 extern int yylex();
@@ -11,7 +12,8 @@ extern int yyparse();
 extern char *yytext;
 extern FILE *yyin;
 extern int yylineno;
-extern char *current_filename;  // Add this to track current file
+extern char *current_filename;
+extern struct tree *root;
 
 char *current_filename = NULL;
 
@@ -19,16 +21,6 @@ char *current_filename = NULL;
 int error_count = 0;
 #define MAX_ERROR_MSG_LENGTH 1024
 char last_token[256] = "";
-
-struct token {
-    int category;
-    char *text;
-    int lineno;
-    char *filename;
-    int ival;
-    double dval;
-    char *sval;
-};
 
 struct tokenlist {
     struct token *t;
@@ -153,18 +145,18 @@ void add_token(int category, char *text, int lineno, const char *filename) {
     new_token->lineno = lineno;
     new_token->filename = strdup(filename);
 
-    new_token->ival = 0;
-    new_token->dval = 0.0;
-    new_token->sval = NULL;
+    new_token->value.ival = 0;
+    new_token->value.dval = 0.0;
+    new_token->value.sval = NULL;
     if (category == IntegerLiteral) {
-        new_token->ival = atoi(text);
+        new_token->value.ival = atoi(text);
     } 
     else if (category == RealLiteral) {
-        new_token->dval = atof(text);
+        new_token->value.dval = atof(text);
     }
     else if (category == CharacterLiteral) {
         printf("%s", text);
-        new_token->sval = process_escape_sequences(text);
+        new_token->value.sval = process_escape_sequences(text);
     }
 
     new_node->t = new_token;
@@ -178,27 +170,27 @@ void add_token(int category, char *text, int lineno, const char *filename) {
     }
 }
 
-void print_tokens() {
-    printf("Category\tText\t\tLinenum\tFilename\tIval/Sval\n");
-    printf("-------------------------------------------------------------------------\n");
+// void print_tokens() {
+//     printf("Category\tText\t\tLinenum\tFilename\tIval/Sval\n");
+//     printf("-------------------------------------------------------------------------\n");
 
-    struct tokenlist *current = head;
-    while (current) {
-        struct token *t = current->t;
-        printf("%-8d\t%-8s\t%-4d\t%-12s", t->category, t->text, t->lineno, t->filename);
-        if (t->category == IntegerLiteral) {
-            printf("\t%d", t->ival);
-        } 
-        else if (t->category == RealLiteral) {
-            printf("\t%lf", t->dval);
-        }
-        else if (t->category == CharacterLiteral && t->sval) {
-            printf("\t%s", t->sval);
-        }
-        printf("\n");
-        current = current->next;
-    }
-}
+//     struct tokenlist *current = head;
+//     while (current) {
+//         struct token *t = current->t;
+//         printf("%-8d\t%-8s\t%-4d\t%-12s", t->category, t->text, t->lineno, t->filename);
+//         if (t->category == IntegerLiteral) {
+//             printf("\t%d", t->ival);
+//         } 
+//         else if (t->category == RealLiteral) {
+//             printf("\t%lf", t->dval);
+//         }
+//         else if (t->category == CharacterLiteral && t->sval) {
+//             printf("\t%s", t->sval);
+//         }
+//         printf("\n");
+//         current = current->next;
+//     }
+// }
 
 void free_tokens() {
     struct tokenlist *current = head;
@@ -206,7 +198,7 @@ void free_tokens() {
         struct tokenlist *next = current->next;
         free(current->t->text);
         free(current->t->filename);
-        if (current->t->category == CharacterLiteral) free(current->t->sval);
+        if (current->t->category == CharacterLiteral) free(current->t->value.sval);
         free(current->t);
         free(current);
         current = next;
@@ -215,17 +207,19 @@ void free_tokens() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: %s <input_file> [-dot]\n", argv[0]);
         return 1;
     }
+
+    int generate_dot = (argc == 3 && strcmp(argv[2], "-dot") == 0);
 
     char filename[256];
     strncpy(filename, argv[1], sizeof(filename) - 1);
     filename[sizeof(filename) - 1] = '\0';
 
     add_extension_if_needed(filename);
-    current_filename = strdup(filename);  // Store filename globally
+    current_filename = strdup(filename);
 
     yyin = fopen(filename, "r");
     if (!yyin) {
@@ -236,14 +230,21 @@ int main(int argc, char *argv[]) {
     int parse_result = yyparse();
     if (parse_result == 0) {
         printf("Parsing completed successfully!\n");
+
+        if (generate_dot) {
+            char dot_filename[300];
+            snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filename);
+            print_graph(root, dot_filename);
+            printf("DOT file generated: %s\n", dot_filename);
+        }
     } else {
         printf("\nParsing failed with %d error(s)\n", error_count);
     }
 
     fclose(yyin);
     free(current_filename);
-
-    print_tokens();
     free_tokens();
+    
     return parse_result;
 }
+

@@ -60,6 +60,7 @@ void freetoken(struct token *t) {
  * Allocates a new tree node with the given production rule, symbol name,
  * and child nodes.
  */
+static int serial = 0;
 struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     struct tree *t = malloc(sizeof(struct tree));
     if (!t) {
@@ -67,6 +68,7 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
         exit(EXIT_FAILURE);
     }
 
+    t->id = serial++;
     t->prodrule = prodrule;
     t->symbolname = symbolname;
     t->nkids = nkids;
@@ -137,4 +139,36 @@ void printtree(struct tree *t, int depth) {
             printtree(t->kids[i], depth + 1);
         }
     }
+}
+
+void print_graph_node(struct tree *t, FILE *f) {
+    if (t->leaf) {
+        fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, t->leaf->text);
+    } else {
+        fprintf(f, "N%d [shape=oval label=\"%s\"];\n", t->id, t->symbolname);
+    }
+}
+
+void print_graph_edges(struct tree *t, FILE *f) {
+    for (int i = 0; i < t->nkids; i++) {
+        if (t->kids[i]) {
+            fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
+            print_graph_edges(t->kids[i], f);
+        }
+    }
+}
+
+void print_graph(struct tree *t, char *filename) {
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot open file %s\n", filename);
+        return;
+    }
+    
+    fprintf(f, "digraph G {\n");
+    print_graph_node(t, f);
+    print_graph_edges(t, f);
+    fprintf(f, "}\n");
+
+    fclose(f);
 }
