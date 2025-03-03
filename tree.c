@@ -1,6 +1,7 @@
 #include "tree.h"
 #include "k0gram.tab.h"
 #include "ytab.h"
+
 #include <stdarg.h>
 #include <string.h>
 
@@ -68,9 +69,9 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
         exit(EXIT_FAILURE);
     }
 
-    t->id = serial++;
+    t->id = serial++;  // Ensure every node gets a unique ID
     t->prodrule = prodrule;
-    t->symbolname = symbolname;
+    t->symbolname = strdup(symbolname);
     t->nkids = nkids;
     t->leaf = NULL;
 
@@ -78,6 +79,7 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     va_start(args, nkids);
     for (int i = 0; i < nkids; i++) {
         t->kids[i] = va_arg(args, struct tree *);
+        if (t->kids[i]) t->kids[i]->id = serial++;  // Ensure unique IDs for children
     }
     va_end(args);
 
@@ -141,34 +143,70 @@ void printtree(struct tree *t, int depth) {
     }
 }
 
-void print_graph_node(struct tree *t, FILE *f) {
-    if (t->leaf) {
-        fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, t->leaf->text);
-    } else {
-        fprintf(f, "N%d [shape=oval label=\"%s\"];\n", t->id, t->symbolname);
-    }
-}
+char *escape(char *s) {
+    int len = strlen(s);
+    char *s2 = malloc(len * 2 + 1);  // Allocate extra space for escaping
+    char *p = s2;
 
-void print_graph_edges(struct tree *t, FILE *f) {
-    for (int i = 0; i < t->nkids; i++) {
-        if (t->kids[i]) {
-            fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
-            print_graph_edges(t->kids[i], f);
+    for (int i = 0; i < len; i++) {
+        if (s[i] == '"' || s[i] == '\\') {  // Escape quotes and backslashes
+            *p++ = '\\';
         }
+        *p++ = s[i];
     }
+    *p = '\0';  // Null-terminate the new string
+    return s2;
 }
 
-void print_graph(struct tree *t, char *filename) {
-    FILE *f = fopen(filename, "w");
-    if (!f) {
-        fprintf(stderr, "Error: Cannot open file %s\n", filename);
-        return;
-    }
-    
-    fprintf(f, "digraph G {\n");
-    print_graph_node(t, f);
-    print_graph_edges(t, f);
-    fprintf(f, "}\n");
-
-    fclose(f);
+ 
+ char *pretty_print_name(struct tree *t) {
+    char *s2 = malloc(40);
+    if (t->leaf == NULL) {
+       sprintf(s2, "%s#%d", t->symbolname, t->prodrule);
+       return s2;
+       }
+    else {
+       sprintf(s2,"%s:%d", escape(t->leaf->text), t->leaf->category);
+       return s2;
+       }
+ }
+ 
+ void print_branch(struct tree *t, FILE *f) {
+    fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, pretty_print_name(t));
+ }
+  
+ void print_leaf(struct tree *t, FILE *f) {
+    if (!t || !t->leaf) return;  // Safety check
+    fprintf(f, "N%d [shape=box style=dotted label=\"%s\\n", t->id, "Leaf");
+    fprintf(f, "text = %s \\l lineno = %d \\l\"];\n", escape(t->leaf->text), t->leaf->lineno);
 }
+
+ 
+ void print_graph2(struct tree *t, FILE *f) {
+    int i;
+    if (t->leaf != NULL) {
+       print_leaf(t, f);
+       return;
+       }
+    /* not a leaf ==> internal node */
+    print_branch(t, f);
+    for(i=0; i < t->nkids; i++) {
+       if (t->kids[i] != NULL) {
+          fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
+      print_graph2(t->kids[i], f);
+      }
+       else { /* NULL kid, epsilon production or something */
+          fprintf(f, "N%d -> N%d%d;\n", t->id, t->id, serial);
+      fprintf(f, "N%d%d [label=\"%s\"];\n", t->id, serial, "Empty rule");
+      serial++;
+      }
+       }
+ }
+ 
+ void print_graph(struct tree *t, char *filename){
+       FILE *f = fopen(filename, "w"); /* should check for NULL */
+       fprintf(f, "digraph {\n");
+       print_graph2(t, f);
+       fprintf(f,"}\n");
+       fclose(f);
+ }
