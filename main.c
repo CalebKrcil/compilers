@@ -231,6 +231,8 @@ int main(int argc, char *argv[]) {
     if (parse_result == 0) {
         printf("Parsing completed successfully!\n");
 
+        printsyms(root);
+
         if (generate_dot) {
             char dot_filename[300];
             snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filename);

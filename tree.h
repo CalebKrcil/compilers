@@ -32,5 +32,6 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
 void print_graph(struct tree *t, char *filename);
+void printsyms(struct tree *t);
 
 #endif

@@ -1,6 +1,7 @@
 #include "tree.h"
 #include "k0gram.tab.h"
 #include "ytab.h"
+#include "symtab.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -43,6 +44,27 @@ int alctoken(int category, char *text) {
     return category;
 }
 
+void printsymbol(char *s) {
+    printf("%s\n", s);
+    fflush(stdout);
+}
+
+// Recursive function to traverse and print symbols
+void printsyms(struct tree *t) {
+    if (!t) return;
+
+    // printf("Visiting: %s\n", t->symbolname);
+
+    // If this node is an identifier, print it
+    if (t->leaf && t->leaf->category == 396) {
+        printsymbol(t->leaf->text);
+    }
+
+    // Recursively visit all child nodes
+    for (int i = 0; i < t->nkids; i++) {
+        printsyms(t->kids[i]);
+    }
+}
 
 /**
  * Frees memory allocated for a token.
