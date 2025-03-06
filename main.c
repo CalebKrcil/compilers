@@ -227,11 +227,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    SymbolTable globalSymtab = mksymtab(50, NULL);
+
     int parse_result = yyparse();
     if (parse_result == 0) {
         printf("Parsing completed successfully!\n");
 
-        printsyms(root);
+        printsyms(root, globalSymtab);  // Populate the global symbol table
+        print_symbols(globalSymtab);
 
         if (generate_dot) {
             char dot_filename[300];
@@ -245,6 +248,7 @@ int main(int argc, char *argv[]) {
 
     fclose(yyin);
     free(current_filename);
+    free_symbol_table(globalSymtab);
     free_tokens();
     
     return parse_result;

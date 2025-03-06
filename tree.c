@@ -50,21 +50,43 @@ void printsymbol(char *s) {
 }
 
 // Recursive function to traverse and print symbols
-void printsyms(struct tree *t) {
+void printsyms(struct tree *t, SymbolTable st) {
     if (!t) return;
 
-    // printf("Visiting: %s\n", t->symbolname);
+    // Check if this is a variable declaration node
+    if (t->prodrule == VAR || t->prodrule == VAL) {
+        char *varName = NULL;
+        char *varType = "unknown";  // Default type if unspecified
 
-    // If this node is an identifier, print it
-    if (t->leaf && t->leaf->category == 396) {
-        printsymbol(t->leaf->text);
+        if (t->nkids >= 2) { 
+            varName = t->kids[0]->leaf->text;  // First child is the variable name
+        }
+        if (t->nkids >= 3) {
+            varType = t->kids[1]->leaf->text;  // Second child should be the type
+        }
+
+        if (varName) {
+            insert_symbol(st, varName, VARIABLE, varType);
+        }
+    }
+    // Handle function declarations
+    else if (t->prodrule == FUN) {
+        char *funcName = t->kids[0]->leaf->text;
+        char *returnType = (t->nkids >= 3) ? t->kids[2]->leaf->text : "void";
+
+        insert_symbol(st, funcName, FUNCTION, returnType);
+    }
+    // Handle general identifiers (like usage in expressions)
+    else if (t->leaf && t->leaf->category == 396) {
+        insert_symbol(st, t->leaf->text, VARIABLE, "unknown");
     }
 
-    // Recursively visit all child nodes
+    // Recursively visit child nodes
     for (int i = 0; i < t->nkids; i++) {
-        printsyms(t->kids[i]);
+        printsyms(t->kids[i], st);
     }
 }
+
 
 /**
  * Frees memory allocated for a token.

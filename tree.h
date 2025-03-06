@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include "symtab.h"
 
 struct token {
     int category;
@@ -32,6 +33,6 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
 void print_graph(struct tree *t, char *filename);
-void printsyms(struct tree *t);
+void printsyms(struct tree *t, SymbolTable st);
 
 #endif
