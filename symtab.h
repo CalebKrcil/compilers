@@ -16,10 +16,10 @@ typedef struct sym_entry {
 } *SymbolTableEntry;
 
 typedef struct sym_table {
-    int nBuckets;            // Number of buckets
-    int nEntries;            // Number of symbols
-    struct sym_table *parent; // Enclosing scope (NULL if global)
-    struct sym_entry **tbl;  // Array of linked lists
+    int nBuckets;           
+    int nEntries;           
+    struct sym_table *parent; 
+    struct sym_entry **tbl;  
 } *SymbolTable;
 
 

@@ -1,6 +1,5 @@
 #include "symtab.h"
 
-// Create a new symbol table with an optional parent (for scoping)
 SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
     SymbolTable st = malloc(sizeof(struct sym_table));
     if (!st) {
@@ -10,7 +9,7 @@ SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
 
     st->nBuckets = nBuckets;
     st->nEntries = 0;
-    st->parent = parent;  // Store parent scope reference
+    st->parent = parent;  
     st->tbl = calloc(nBuckets, sizeof(SymbolTableEntry));
 
     if (!st->tbl) {
@@ -23,7 +22,6 @@ SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
 }
 
 
-// Hash function for symbols
 int hash(SymbolTable st, char *s) {
     int h = 0;
     char c;
@@ -35,7 +33,6 @@ int hash(SymbolTable st, char *s) {
     return h % st->nBuckets;
 }
 
-// Insert a symbol with attributes
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
     int index = hash(st, s);
     SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));
@@ -43,32 +40,28 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
     newEntry->s = strdup(s);
     newEntry->kind = kind;
     newEntry->type = strdup(type);
-    newEntry->table = st;  // Track which table this symbol belongs to
-    newEntry->next = st->tbl[index]; // Handle collisions with linked list
+    newEntry->table = st;  
+    newEntry->next = st->tbl[index]; 
     st->tbl[index] = newEntry;
 
     st->nEntries++;
 }
 
 
-// Look up a symbol in the current and parent scopes
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
     int index = hash(st, s);
     SymbolTableEntry entry = st->tbl[index];
 
-    // Search in current scope
     while (entry) {
         if (strcmp(entry->s, s) == 0) return entry;
         entry = entry->next;
     }
 
-    // If not found, search in parent scope
     if (st->parent) return lookup_symbol(st->parent, s);
     
-    return NULL; // Not found
+    return NULL; 
 }
 
-// Print the symbol table with attributes
 void print_symbols(SymbolTable st) {
     printf("\nSymbol Table (Scope Level: %p)\n", (void *)st);
     printf("=======================================================================\n");
@@ -92,7 +85,6 @@ void print_symbols(SymbolTable st) {
 }
 
 
-// Free symbol table memory
 void free_symbol_table(SymbolTable st) {
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
