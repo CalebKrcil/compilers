@@ -207,50 +207,92 @@ void free_tokens() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "Usage: %s <input_file> [-dot]\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <input_file> [-tree] [-symtab] [-dot]\n", argv[0]);
         return 1;
     }
 
-    int generate_dot = (argc == 3 && strcmp(argv[2], "-dot") == 0);
+    int print_tree = 0, print_symtab = 0, generate_dot = 0;
+    char *filename = NULL;
 
-    char filename[256];
-    strncpy(filename, argv[1], sizeof(filename) - 1);
-    filename[sizeof(filename) - 1] = '\0';
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-tree") == 0) {
+            print_tree = 1;
+        } else if (strcmp(argv[i], "-symtab") == 0) {
+            print_symtab = 1;
+        } else if (strcmp(argv[i], "-dot") == 0) {
+            generate_dot = 1;
+        } else {
+            filename = argv[i];
+        }
+    }
 
-    add_extension_if_needed(filename);
-    current_filename = strdup(filename);
+    if (!filename) {
+        fprintf(stderr, "Error: No input file provided\n");
+        return 1;
+    }
 
-    yyin = fopen(filename, "r");
+    char filepath[256];
+    strncpy(filepath, filename, sizeof(filepath) - 1);
+    filepath[sizeof(filepath) - 1] = '\0';
+
+    add_extension_if_needed(filepath);
+    current_filename = strdup(filepath);
+
+    yyin = fopen(filepath, "r");
     if (!yyin) {
         perror("Error opening file");
         return EXIT_FAILURE;
     }
 
+    printf("Processing file: %s\n", filepath);
+
+    // Create global and package symbol tables
     SymbolTable globalSymtab = mksymtab(50, NULL);
+    SymbolTable packageSymtab = mksymtab(50, globalSymtab);
 
     int parse_result = yyparse();
     if (parse_result == 0) {
         printf("Parsing completed successfully!\n");
+        printsyms(root, packageSymtab);
 
-        printsyms(root, globalSymtab);  // Populate the global symbol table
-        print_symbols(globalSymtab);
+        if (print_symtab) {
+            printf("--- symbol table for: package main ---\n");
+            print_symbols(packageSymtab);
+        }
 
+        // Correctly traverse function declarations
+        for (int i = 0; i < root->nkids; i++) {
+            struct tree *func_node = root->kids[i];
+            if (func_node->prodrule == FUN) {
+                char *func_name = func_node->kids[0]->leaf->text;
+                SymbolTable funcSymtab = create_function_scope(packageSymtab, func_name);
+                printsyms(func_node, funcSymtab);
+
+                if (print_symtab) {
+                    printf("--- symbol table for: func %s ---\n", func_name);
+                    print_symbols(funcSymtab);
+                }
+                free_symbol_table(funcSymtab);
+            }
+        }
+
+        if (print_tree) {
+            printtree(root, 0);
+        }
         if (generate_dot) {
             char dot_filename[300];
-            snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filename);
+            snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filepath);
             print_graph(root, dot_filename);
             printf("DOT file generated: %s\n", dot_filename);
         }
     } else {
-        printf("\nParsing failed with %d error(s)\n", error_count);
+        fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }
 
     fclose(yyin);
     free(current_filename);
+    free_symbol_table(packageSymtab);
     free_symbol_table(globalSymtab);
-    free_tokens();
-    
     return parse_result;
 }
-

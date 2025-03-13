@@ -71,7 +71,6 @@ nl_opt:
 program:
     nl_opt topLevelObjectList nl_opt{
         root = $2;
-        printtree(root, 0);
     }
     ;
 
