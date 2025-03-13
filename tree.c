@@ -67,21 +67,24 @@ void printsyms(struct tree *t, SymbolTable st) {
 
     // Handle variable declarations
     if (t->prodrule == VAR || t->prodrule == VAL) {
-        char *varName = NULL;
-        char *varType = "unknown";  // Default type if unspecified
-
-        // First child is the variable name for VAR and VAL
-        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
-            varName = t->kids[0]->leaf->text;
-        }
-        
-        // Second child might be the type (if it exists)
-        if (t->nkids >= 2 && t->kids[1]) {
-            varType = get_type_name(t->kids[1]);
-        }
-
-        if (varName) {
-            insert_symbol(st, varName, VARIABLE, varType);
+        if (t->nkids >= 1) {
+            // The variable name should be in the first child
+            struct tree *var_name_node = t->kids[0];
+            if (var_name_node && var_name_node->leaf) {
+                // Get the variable name
+                char *var_name = var_name_node->leaf->text;
+                // Default type is "unknown"
+                char *var_type = "unknown";
+                
+                // Try to get type if available (usually second child)
+                if (t->nkids >= 2 && t->kids[1]) {
+                    var_type = get_type_name(t->kids[1]);
+                }
+                
+                // Insert the variable into the symbol table
+                printf("Found variable: %s of type %s\n", var_name, var_type);
+                insert_symbol(st, var_name, VARIABLE, var_type);
+            }
         }
     }
     // Handle function declarations
