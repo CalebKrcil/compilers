@@ -6,29 +6,6 @@
 #include <stdarg.h>
 #include "symtab.h"
 
-// Token categories from the lexer
-enum TokenCategory {
-    Identifier = 396,  // This should match your lexer token definition
-    IntegerLiteral,
-    RealLiteral,
-    CharacterLiteral
-};
-
-// Production rules from the parser
-enum ProductionRule {
-    VAR,
-    VAL,
-    FUN,
-    PACKAGE,
-    CLASS,
-    IF,
-    ELSE,
-    WHILE,
-    FOR,
-    RETURN
-    // Add other production rules as needed
-};
-
 struct token {
     int category;
     char *text;
