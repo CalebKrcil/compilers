@@ -114,13 +114,23 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             struct tree *params_node = t->kids[1];
             for (int i = 0; i < params_node->nkids; i++) {
                 struct tree *param_node = params_node->kids[i];
-                if (param_node && param_node->nkids >= 2) {
-                    char *param_name = param_node->kids[0]->leaf->text;
-                    char *param_type = get_type_name(param_node->kids[1]);
-
-                     printf("Inserting function parameter: %s of type %s into %s\n",
-                            param_name, param_type, current_scope->scope_name);
-                    insert_symbol(current_scope, param_name, VARIABLE, param_type);
+                if (param_node) {
+                    // More defensive coding - check that we have enough children and they're valid
+                    if (param_node->nkids >= 2 && param_node->kids[0] && param_node->kids[0]->leaf &&
+                        param_node->kids[1]) {
+                        
+                        char *param_name = param_node->kids[0]->leaf->text;
+                        char *param_type = get_type_name(param_node->kids[1]);
+                        
+                        printf("Inserting function parameter: %s of type %s into %s\n",
+                               param_name, param_type, current_scope->scope_name);
+                        insert_symbol(current_scope, param_name, VARIABLE, param_type);
+                    } else {
+                        // If structure doesn't match expectations, at least don't crash
+                        printf("Warning: Parameter node has unexpected structure at index %d\n", i);
+                        // Maybe print the tree structure of this node for debugging
+                        printtree(param_node, 0);
+                    }
                 }
             }
         }
