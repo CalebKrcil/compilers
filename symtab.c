@@ -31,6 +31,7 @@ int hash(SymbolTable st, char *s) {
 
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
     printf("Inserting symbol: %s, Type: %s\n", s, type);
+    printf("[DEBUG] Storing symbol: %s of type %s in %s\n", s, type, st->scope_name);
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
         error_count++;  // Increment error count instead of exiting
@@ -86,11 +87,11 @@ void check_undeclared(SymbolTable st, char *s) {
 
 void print_symbols(SymbolTable st) {
     if (!st || !st->scope_name) return;
-    
-    // Symbol printing was already handled in the caller (process_file)
-    // Just print the symbols without the header
-    
-    // Count total symbols for consistent ordering
+
+    // Print the header for the scope
+    printf("--- symbol table for: %s ---\n", st->scope_name);
+
+    // Count total symbols
     int symbol_count = 0;
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
@@ -99,48 +100,68 @@ void print_symbols(SymbolTable st) {
             entry = entry->next;
         }
     }
-    
-    // If no symbols, just print nothing and return
+    for (int i = 0; i < st->nBuckets; i++) {
+        SymbolTableEntry entry = st->tbl[i];
+        while (entry) {
+            printf("[BUCKET %d] %s : %s\n", i, entry->s, entry->type);
+            entry = entry->next;
+        }
+    }
+
+    // If no symbols, print an empty message and return
     if (symbol_count == 0) {
-        printf("---\n\n");
+        printf("    (empty)\n---\n\n");
         return;
     }
+
+    // Allocate memory for sorting symbols
+    char **symbols = malloc(symbol_count * sizeof(char *));
+    char **types = malloc(symbol_count * sizeof(char *));
     
-    // Collect all symbols for alphabetical sorting
-    char **symbols = malloc(symbol_count * sizeof(char*));
-    if (!symbols) {
+    if (!symbols || !types) {
         fprintf(stderr, "Error: Memory allocation failed for symbol sorting\n");
+        free(symbols);
+        free(types);
         return;
     }
-    
+
+    // Collect symbols and types
     int idx = 0;
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
-            symbols[idx++] = entry->s;
+            symbols[idx] = entry->s;
+            types[idx] = entry->type;
+            idx++;
             entry = entry->next;
         }
     }
-    
-    // Simple insertion sort for minimal dependencies
+
+    // Sort symbols alphabetically using insertion sort
     for (int i = 1; i < symbol_count; i++) {
-        char *key = symbols[i];
+        char *key_sym = symbols[i];
+        char *key_type = types[i];
         int j = i - 1;
-        
-        while (j >= 0 && strcmp(symbols[j], key) > 0) {
+
+        while (j >= 0 && strcmp(symbols[j], key_sym) > 0) {
             symbols[j + 1] = symbols[j];
+            types[j + 1] = types[j];
             j--;
         }
-        symbols[j + 1] = key;
+        symbols[j + 1] = key_sym;
+        types[j + 1] = key_type;
     }
-    
-    // Print sorted symbols
+
+    // Print sorted symbols with types
     for (int i = 0; i < symbol_count; i++) {
-        printf("    %s\n", symbols[i]);
+        printf("    %s : %s\n", symbols[i], types[i]);
     }
-    
+
     printf("---\n\n");
+
+    // Free allocated memory
     free(symbols);
+    free(types);
 }
 
 void free_symbol_table(SymbolTable st) {

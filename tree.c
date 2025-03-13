@@ -64,137 +64,102 @@ char *get_type_name(struct tree *type_node) {
 // Recursive function to traverse and print symbols
 void printsyms(struct tree *t, SymbolTable st) {
     if (!t) return;
-    //printf("Processing node: %s\n", t->symbolname);
-    //printf("prodrule = %d\n", t->prodrule);
-    // Handle variable declarations
-    if (t->prodrule == 329 || t->prodrule == 330) {
-        if (t->nkids >= 1) {
-            // The variable name should be in the first child
-            struct tree *var_name_node = t->kids[0];
-            if (var_name_node && var_name_node->leaf) {
-                // Get the variable name
-                char *var_name = var_name_node->leaf->text;
-                // Default type is "unknown"
-                char *var_type = "unknown";
-                
-                // Try to get type if available (usually second child)
-                if (t->nkids >= 2 && t->kids[1]) {
-                    var_type = get_type_name(t->kids[1]);
-                }
-                
-                // Insert the variable into the symbol table
-                printf("Found variable: %s of type %s\n", var_name, var_type);
-                insert_symbol(st, var_name, VARIABLE, var_type);
-            }
-        }
-    }
-    else if (t->prodrule == 280) {
-        if (t->nkids >= 1) {
-            // The variable name should be in the first child
-            struct tree *var_name_node = t->kids[0];
-            if (var_name_node && var_name_node->leaf) {
-                // Get the variable name
-                char *var_name = var_name_node->leaf->text;
-                // Default type is "unknown"
-                char *var_type = "unknown";
-                
-                // Try to get type if available (usually second child)
-                if (t->nkids >= 2 && t->kids[1]) {
-                    var_type = get_type_name(t->kids[1]);
-                }
-                
-                if (!lookup_symbol(st, var_name)) {
-                    printf("Implicitly declaring variable: %s\n", var_name);
-                    insert_symbol(st, var_name, VARIABLE, "unknown"); // Type is unknown at this stage
-                }
-            }
-        }
-    }
-    // // Handle function declarations
-    // else if (t->prodrule == FUN) {
-    //     printf("in functions");
-    //     char *funcName = NULL;
-    //     char *returnType = "Unit";  // Default return type is Unit
-        
-    //     // First child should be the function name
-    //     if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
-    //         funcName = t->kids[0]->leaf->text;
-    //     }
-        
-    //     // Return type is usually the third child
-    //     if (t->nkids >= 3) {
-    //         returnType = get_type_name(t->kids[2]);
-    //     }
 
-    //     if (funcName) {
-    //         insert_symbol(st, funcName, FUNCTION, returnType);
-    //     }
-        
-    //     // Process function parameters
-    //     if (t->nkids >= 2 && t->kids[1]) {
-    //         struct tree *params = t->kids[1];
-    //         for (int i = 0; i < params->nkids; i++) {
-    //             struct tree *param = params->kids[i];
-    //             if (param->nkids >= 2) {
-    //                 char *paramName = param->kids[0]->leaf->text;
-    //                 char *paramType = get_type_name(param->kids[1]);
-    //                 insert_symbol(st, paramName, VARIABLE, paramType);
-    //             }
-    //         }
-    //     }
-    // }
-    // Handle identifiers in expressions (check for undeclared variables)
-    else if (t->prodrule == 327) {
-        printf("dealing with function");
-        if (t->nkids >= 1) {
-            // The function name should be in the first child
-            struct tree *func_name_node = t->kids[0];
-            if (func_name_node && func_name_node->leaf) {
-                char *func_name = func_name_node->leaf->text;
-                // Default return type is "Unit"
-                char *return_type = "Unit";
-                
-                // Try to get return type if available
-                if (t->nkids >= 3 && t->kids[2]) {
-                    return_type = get_type_name(t->kids[2]);
+    // Track the current scope (default is the given symbol table)
+    SymbolTable current_scope = st;
+
+    // Handle function declarations
+    if (t->prodrule == 327) {  // Function declaration
+        char *func_name = NULL;
+        char *return_type = "Unit"; // Default return type
+
+        // First child should be the function name
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+            func_name = t->kids[0]->leaf->text;
+        }
+
+        // Return type is usually the third child
+        if (t->nkids >= 3) {
+            return_type = get_type_name(t->kids[2]);
+        }
+
+        if (func_name) {
+            printf("Processing function: %s\n", func_name);
+            insert_symbol(st, func_name, FUNCTION, return_type);
+            printf("Created function scope for: %s\n", func_name);
+
+            // Create a new symbol table for this function scope
+            current_scope = create_function_scope(st, func_name);
+        }
+
+        // Process function parameters (parameters belong in function scope)
+        if (t->nkids >= 2 && t->kids[1]) {
+            struct tree *params_node = t->kids[1];
+            for (int i = 0; i < params_node->nkids; i++) {
+                struct tree *param_node = params_node->kids[i];
+                if (param_node && param_node->nkids >= 2) {
+                    char *param_name = param_node->kids[0]->leaf->text;
+                    char *param_type = get_type_name(param_node->kids[1]);
+
+                    printf("Inserting function parameter: %s of type %s into %s\n",
+                           param_name, param_type, current_scope->scope_name);
+                    insert_symbol(current_scope, param_name, VARIABLE, param_type);
                 }
-                
-                // Insert the function into the symbol table
-                printf("Found function: %s returning %s\n", func_name, return_type);
-                insert_symbol(st, func_name, FUNCTION, return_type);
-                
-                // Process parameters if available
-                if (t->nkids >= 2 && t->kids[1]) {
-                    struct tree *params_node = t->kids[1];
-                    for (int i = 0; i < params_node->nkids; i++) {
-                        struct tree *param_node = params_node->kids[i];
-                        if (param_node && param_node->nkids >= 2) {
-                            // Parameter name and type
-                            char *param_name = param_node->kids[0]->leaf->text;
-                            char *param_type = get_type_name(param_node->kids[1]);
-                            
-                            printf("Found parameter: %s of type %s\n", param_name, param_type);
-                            insert_symbol(st, param_name, VARIABLE, param_type);
-                        }
+            }
+        }
+    }
+
+    // Handle variable declarations (in the correct scope)
+    else if (t->prodrule == 329 || t->prodrule == 330) {  // VAR or VAL declaration
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+            char *var_name = t->kids[0]->leaf->text;
+            char *var_type = "unknown";
+
+            // Try to find type in siblings
+            if (t->nkids >= 2) {
+                for (int i = 1; i < t->nkids; i++) {
+                    if (t->kids[i] && strcmp(t->kids[i]->symbolname, "type") == 0) {
+                        var_type = get_type_name(t->kids[i]);
+                        break;
                     }
                 }
             }
-        }
-    }
-    // Check for variable usage (identifier references)
-    else if (t->leaf && t->leaf->category == Identifier) {
-        // Make sure this is not part of a declaration
-        if (t->prodrule != 329 && t->prodrule != 330 && t->prodrule != 327) {
-            // Check if this identifier is declared
-            check_undeclared(st, t->leaf->text);
+
+            // Insert into the correct scope (function or global)
+            printf("Inserting variable: %s of type %s into %s\n",
+                   var_name, var_type, current_scope->scope_name);
+            insert_symbol(current_scope, var_name, VARIABLE, var_type);
         }
     }
 
-    // Recursively visit child nodes
+    // Handle assignments (only insert if variable is undeclared in the current scope)
+    else if (t->prodrule == 280) {  // Assignment
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+            char *var_name = t->kids[0]->leaf->text;
+
+            // If variable is not already declared in the current scope, insert it
+            if (!lookup_symbol_current_scope(current_scope, var_name)) {
+                printf("Implicitly declaring variable: %s in %s\n",
+                       var_name, current_scope->scope_name);
+                insert_symbol(current_scope, var_name, VARIABLE, "unknown");  // Type unknown at this stage
+            }
+        }
+    }
+
+    // Check for variable usage (identifier references)
+    else if (t->leaf && t->leaf->category == Identifier) {
+        // Ensure it's not a declaration
+        if (t->prodrule != 329 && t->prodrule != 330 && t->prodrule != 327) {
+            check_undeclared(current_scope, t->leaf->text);
+        }
+    }
+
+    // Recursively visit child nodes using the correct scope
     for (int i = 0; i < t->nkids; i++) {
-        printsyms(t->kids[i], st);
+        printsyms(t->kids[i], current_scope);
     }
 }
+
 
 /**
  * Frees memory allocated for a token.

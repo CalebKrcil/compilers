@@ -220,7 +220,6 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
             // Print symbol tables if requested
             if (print_symtab) {
-                printf("--- symbol table for: package main ---\n");
                 print_symbols(packageSymtab);
 
                 // Traverse function declarations
@@ -234,7 +233,6 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
                         printsyms(func_node, funcSymtab);
                         
                         if (print_symtab) {
-                            printf("--- symbol table for: func %s ---\n", func_name);
                             print_symbols(funcSymtab);
                         }
                         
