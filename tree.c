@@ -9,6 +9,7 @@
 extern int yylineno;
 extern char *current_filename;
 extern YYSTYPE yylval;
+extern int error_count;
 
 /**
  * Allocates a token and initializes it based on its category.
@@ -49,20 +50,29 @@ void printsymbol(char *s) {
     fflush(stdout);
 }
 
+// Helper function to determine variable type
+char *get_type_name(struct tree *type_node) {
+    if (!type_node || !type_node->leaf) return "unknown";
+    return type_node->leaf->text;
+}
+
 // Recursive function to traverse and print symbols
 void printsyms(struct tree *t, SymbolTable st) {
     if (!t) return;
 
-    // Check if this is a variable declaration node
+    // Handle variable declarations
     if (t->prodrule == VAR || t->prodrule == VAL) {
         char *varName = NULL;
         char *varType = "unknown";  // Default type if unspecified
 
-        if (t->nkids >= 2) { 
-            varName = t->kids[0]->leaf->text;  // First child is the variable name
+        // First child is the variable name for VAR and VAL
+        if (t->nkids >= 1 && t->kids[0]->leaf) {
+            varName = t->kids[0]->leaf->text;
         }
-        if (t->nkids >= 3) {
-            varType = t->kids[1]->leaf->text;  // Second child should be the type
+        
+        // Second child might be the type (if it exists)
+        if (t->nkids >= 2 && t->kids[1]) {
+            varType = get_type_name(t->kids[1]);
         }
 
         if (varName) {
@@ -71,14 +81,43 @@ void printsyms(struct tree *t, SymbolTable st) {
     }
     // Handle function declarations
     else if (t->prodrule == FUN) {
-        char *funcName = t->kids[0]->leaf->text;
-        char *returnType = (t->nkids >= 3) ? t->kids[2]->leaf->text : "void";
+        char *funcName = NULL;
+        char *returnType = "Unit";  // Default return type is Unit
+        
+        // First child should be the function name
+        if (t->nkids >= 1 && t->kids[0]->leaf) {
+            funcName = t->kids[0]->leaf->text;
+        }
+        
+        // Return type is usually the third child
+        if (t->nkids >= 3) {
+            returnType = get_type_name(t->kids[2]);
+        }
 
-        insert_symbol(st, funcName, FUNCTION, returnType);
+        if (funcName) {
+            insert_symbol(st, funcName, FUNCTION, returnType);
+        }
+        
+        // Process function parameters
+        if (t->nkids >= 2 && t->kids[1]) {
+            struct tree *params = t->kids[1];
+            for (int i = 0; i < params->nkids; i++) {
+                struct tree *param = params->kids[i];
+                if (param->nkids >= 2) {
+                    char *paramName = param->kids[0]->leaf->text;
+                    char *paramType = get_type_name(param->kids[1]);
+                    insert_symbol(st, paramName, VARIABLE, paramType);
+                }
+            }
+        }
     }
-    // Handle general identifiers (like usage in expressions)
-    else if (t->leaf && t->leaf->category == 396) {
-        insert_symbol(st, t->leaf->text, VARIABLE, "unknown");
+    // Handle identifiers in expressions (check for undeclared variables)
+    else if (t->leaf && t->leaf->category == Identifier) {
+        // Check if the identifier is being used (not declared)
+        // This requires context analysis to determine if it's a usage or declaration
+        if (t->prodrule != VAR && t->prodrule != VAL && t->prodrule != FUN) {
+            check_undeclared(st, t->leaf->text);
+        }
     }
 
     // Recursively visit child nodes
@@ -86,7 +125,6 @@ void printsyms(struct tree *t, SymbolTable st) {
         printsyms(t->kids[i], st);
     }
 }
-
 
 /**
  * Frees memory allocated for a token.
@@ -123,7 +161,6 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     va_start(args, nkids);
     for (int i = 0; i < nkids; i++) {
         t->kids[i] = va_arg(args, struct tree *);
-        if (t->kids[i]) t->kids[i]->id = serial++;  // Ensure unique IDs for children
     }
     va_end(args);
 
@@ -188,8 +225,15 @@ void printtree(struct tree *t, int depth) {
 }
 
 char *escape(char *s) {
+    if (!s) return strdup("NULL");
+    
     int len = strlen(s);
     char *s2 = malloc(len * 2 + 1);  // Allocate extra space for escaping
+    if (!s2) {
+        fprintf(stderr, "Memory allocation failed for escaped string\n");
+        exit(EXIT_FAILURE);
+    }
+    
     char *p = s2;
 
     for (int i = 0; i < len; i++) {
@@ -202,55 +246,78 @@ char *escape(char *s) {
     return s2;
 }
 
- 
- char *pretty_print_name(struct tree *t) {
-    char *s2 = malloc(40);
+char *pretty_print_name(struct tree *t) {
+    if (!t) return strdup("NULL");
+    
+    char *s2 = malloc(256);  // More generous allocation
+    if (!s2) {
+        fprintf(stderr, "Memory allocation failed for node name\n");
+        exit(EXIT_FAILURE);
+    }
+    
     if (t->leaf == NULL) {
-       sprintf(s2, "%s#%d", t->symbolname, t->prodrule);
-       return s2;
-       }
-    else {
-       sprintf(s2,"%s:%d", escape(t->leaf->text), t->leaf->category);
-       return s2;
-       }
- }
+        sprintf(s2, "%s#%d", t->symbolname, t->prodrule);
+    } else {
+        char *escaped_text = escape(t->leaf->text);
+        sprintf(s2, "%s:%d", escaped_text, t->leaf->category);
+        free(escaped_text);
+    }
+    return s2;
+}
  
- void print_branch(struct tree *t, FILE *f) {
-    fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, pretty_print_name(t));
- }
+void print_branch(struct tree *t, FILE *f) {
+    if (!t) return;
+    
+    char *name = pretty_print_name(t);
+    fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, name);
+    free(name);
+}
   
- void print_leaf(struct tree *t, FILE *f) {
-    if (!t || !t->leaf) return;  // Safety check
+void print_leaf(struct tree *t, FILE *f) {
+    if (!t || !t->leaf) return;
+    
+    char *escaped_text = escape(t->leaf->text);
     fprintf(f, "N%d [shape=box style=dotted label=\"%s\\n", t->id, "Leaf");
-    fprintf(f, "text = %s \\l lineno = %d \\l\"];\n", escape(t->leaf->text), t->leaf->lineno);
+    fprintf(f, "text = %s \\l lineno = %d \\l\"];\n", escaped_text, t->leaf->lineno);
+    free(escaped_text);
 }
 
- 
- void print_graph2(struct tree *t, FILE *f) {
-    int i;
+void print_graph2(struct tree *t, FILE *f) {
+    if (!t) return;
+    
     if (t->leaf != NULL) {
-       print_leaf(t, f);
-       return;
-       }
+        print_leaf(t, f);
+        return;
+    }
+    
     /* not a leaf ==> internal node */
     print_branch(t, f);
-    for(i=0; i < t->nkids; i++) {
-       if (t->kids[i] != NULL) {
-          fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
-      print_graph2(t->kids[i], f);
-      }
-       else { /* NULL kid, epsilon production or something */
-          fprintf(f, "N%d -> N%d%d;\n", t->id, t->id, serial);
-      fprintf(f, "N%d%d [label=\"%s\"];\n", t->id, serial, "Empty rule");
-      serial++;
-      }
-       }
- }
+    for (int i = 0; i < t->nkids; i++) {
+        if (t->kids[i] != NULL) {
+            fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
+            print_graph2(t->kids[i], f);
+        } else { /* NULL kid, epsilon production or something */
+            int temp_id = serial++;
+            fprintf(f, "N%d -> N%d;\n", t->id, temp_id);
+            fprintf(f, "N%d [label=\"%s\"];\n", temp_id, "Empty rule");
+        }
+    }
+}
  
- void print_graph(struct tree *t, char *filename){
-       FILE *f = fopen(filename, "w"); /* should check for NULL */
-       fprintf(f, "digraph {\n");
-       print_graph2(t, f);
-       fprintf(f,"}\n");
-       fclose(f);
- }
+void print_graph(struct tree *t, char *filename) {
+    if (!t) {
+        fprintf(stderr, "Error: Cannot generate DOT file for NULL tree\n");
+        return;
+    }
+    
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot open file %s for writing\n", filename);
+        return;
+    }
+    
+    fprintf(f, "digraph {\n");
+    print_graph2(t, f);
+    fprintf(f, "}\n");
+    fclose(f);
+}
