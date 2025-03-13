@@ -57,9 +57,8 @@ fun main() {
     if (x && !y) {
         println("Boolean logic works!")
     }
-
     // Function with Multiple Parameters
-    println("Sum Function: " + sum(3, 4))
+    println("Sum Function: ")
 
     // Nested Conditionals
     if (a > 0) {
@@ -74,7 +73,7 @@ fun square(n: Int): Int {
     return n * n
 }
 
-fun sum(x: Int, y: Int): Int {
+fun sum(x: Int): Int {
     return x + y
 }
 

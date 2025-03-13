@@ -66,6 +66,7 @@
 nl_opt:
     /* epsilon */
     | NL nl_opt
+    | SEMICOLON nl_opt
     ;
 
 // Program structure
