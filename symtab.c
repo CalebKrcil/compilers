@@ -1,5 +1,7 @@
 #include "symtab.h"
 
+extern int error_count;
+
 SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
     SymbolTable st = malloc(sizeof(struct sym_table));
     if (!st) {
@@ -28,6 +30,7 @@ int hash(SymbolTable st, char *s) {
 }
 
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
+    printf("Inserting symbol: %s, Type: %s\n", s, type);
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
         error_count++;  // Increment error count instead of exiting

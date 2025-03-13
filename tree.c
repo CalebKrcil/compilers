@@ -64,9 +64,10 @@ char *get_type_name(struct tree *type_node) {
 // Recursive function to traverse and print symbols
 void printsyms(struct tree *t, SymbolTable st) {
     if (!t) return;
-
+    //printf("Processing node: %s\n", t->symbolname);
+    //printf("prodrule = %d\n", t->prodrule);
     // Handle variable declarations
-    if (t->prodrule == VAR || t->prodrule == VAL) {
+    if (t->prodrule == 329 || t->prodrule == 330) {
         if (t->nkids >= 1) {
             // The variable name should be in the first child
             struct tree *var_name_node = t->kids[0];
@@ -87,40 +88,64 @@ void printsyms(struct tree *t, SymbolTable st) {
             }
         }
     }
-    // Handle function declarations
-    else if (t->prodrule == FUN) {
-        char *funcName = NULL;
-        char *returnType = "Unit";  // Default return type is Unit
-        
-        // First child should be the function name
-        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
-            funcName = t->kids[0]->leaf->text;
-        }
-        
-        // Return type is usually the third child
-        if (t->nkids >= 3) {
-            returnType = get_type_name(t->kids[2]);
-        }
-
-        if (funcName) {
-            insert_symbol(st, funcName, FUNCTION, returnType);
-        }
-        
-        // Process function parameters
-        if (t->nkids >= 2 && t->kids[1]) {
-            struct tree *params = t->kids[1];
-            for (int i = 0; i < params->nkids; i++) {
-                struct tree *param = params->kids[i];
-                if (param->nkids >= 2) {
-                    char *paramName = param->kids[0]->leaf->text;
-                    char *paramType = get_type_name(param->kids[1]);
-                    insert_symbol(st, paramName, VARIABLE, paramType);
+    else if (t->prodrule == 280) {
+        if (t->nkids >= 1) {
+            // The variable name should be in the first child
+            struct tree *var_name_node = t->kids[0];
+            if (var_name_node && var_name_node->leaf) {
+                // Get the variable name
+                char *var_name = var_name_node->leaf->text;
+                // Default type is "unknown"
+                char *var_type = "unknown";
+                
+                // Try to get type if available (usually second child)
+                if (t->nkids >= 2 && t->kids[1]) {
+                    var_type = get_type_name(t->kids[1]);
+                }
+                
+                if (!lookup_symbol(st, var_name)) {
+                    printf("Implicitly declaring variable: %s\n", var_name);
+                    insert_symbol(st, var_name, VARIABLE, "unknown"); // Type is unknown at this stage
                 }
             }
         }
     }
+    // // Handle function declarations
+    // else if (t->prodrule == FUN) {
+    //     printf("in functions");
+    //     char *funcName = NULL;
+    //     char *returnType = "Unit";  // Default return type is Unit
+        
+    //     // First child should be the function name
+    //     if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+    //         funcName = t->kids[0]->leaf->text;
+    //     }
+        
+    //     // Return type is usually the third child
+    //     if (t->nkids >= 3) {
+    //         returnType = get_type_name(t->kids[2]);
+    //     }
+
+    //     if (funcName) {
+    //         insert_symbol(st, funcName, FUNCTION, returnType);
+    //     }
+        
+    //     // Process function parameters
+    //     if (t->nkids >= 2 && t->kids[1]) {
+    //         struct tree *params = t->kids[1];
+    //         for (int i = 0; i < params->nkids; i++) {
+    //             struct tree *param = params->kids[i];
+    //             if (param->nkids >= 2) {
+    //                 char *paramName = param->kids[0]->leaf->text;
+    //                 char *paramType = get_type_name(param->kids[1]);
+    //                 insert_symbol(st, paramName, VARIABLE, paramType);
+    //             }
+    //         }
+    //     }
+    // }
     // Handle identifiers in expressions (check for undeclared variables)
-    else if (t->prodrule == FUN) {
+    else if (t->prodrule == 327) {
+        printf("dealing with function");
         if (t->nkids >= 1) {
             // The function name should be in the first child
             struct tree *func_name_node = t->kids[0];
@@ -159,7 +184,7 @@ void printsyms(struct tree *t, SymbolTable st) {
     // Check for variable usage (identifier references)
     else if (t->leaf && t->leaf->category == Identifier) {
         // Make sure this is not part of a declaration
-        if (t->prodrule != VAR && t->prodrule != VAL && t->prodrule != FUN) {
+        if (t->prodrule != 329 && t->prodrule != 330 && t->prodrule != 327) {
             // Check if this identifier is declared
             check_undeclared(st, t->leaf->text);
         }
