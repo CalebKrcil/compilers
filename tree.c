@@ -118,8 +118,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                     char *param_name = param_node->kids[0]->leaf->text;
                     char *param_type = get_type_name(param_node->kids[1]);
 
-                    // printf("Inserting function parameter: %s of type %s into %s\n",
-                    //        param_name, param_type, current_scope->scope_name);
+                     printf("Inserting function parameter: %s of type %s into %s\n",
+                            param_name, param_type, current_scope->scope_name);
                     insert_symbol(current_scope, param_name, VARIABLE, param_type);
                 }
             }
@@ -143,8 +143,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             }
 
             // Insert into the correct scope (function or global)
-            // printf("Inserting variable: %s of type %s into %s\n",
-            //        var_name, var_type, current_scope->scope_name);
+             printf("Inserting variable: %s of type %s into %s\n",
+                    var_name, var_type, current_scope->scope_name);
             insert_symbol(current_scope, var_name, VARIABLE, var_type);
         }
     }
@@ -156,8 +156,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
 
             // If variable is not already declared in the current scope, insert it
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
-                // printf("Implicitly declaring variable: %s in %s\n",
-                //        var_name, current_scope->scope_name);
+                 printf("Implicitly declaring variable: %s in %s\n",
+                        var_name, current_scope->scope_name);
                 insert_symbol(current_scope, var_name, VARIABLE, "unknown");  // Type unknown at this stage
             }
         }

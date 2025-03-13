@@ -59,7 +59,7 @@ fun main() {
     }
 
     // Function with Multiple Parameters
-    println("Sum Function: " + sum(3))
+    println("Sum Function: " + sum(3, 4))
 
     // Nested Conditionals
     if (a > 0) {

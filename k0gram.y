@@ -39,6 +39,7 @@
 %type <treeptr> returnType_section expression additive_expression multiplicative_expression
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
 %type <treeptr> unaryExpression boolExpression returnStatement typeAlias whenStatement whenBranchList whenBranch
+%type <treeptr> expressionList
 
 %start program
 
@@ -273,12 +274,13 @@ expression:
 
 additive_expression:
     multiplicative_expression { $$ = $1; }
-    | additive_expression COMMA additive_expression LOWER_THAN_FUNCTION_CALL_ARGS {
-        fprintf(stderr,"Error: Comma operator is not allowed in k0.");
-        return(1);
-    }
     | additive_expression ADD multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
     | additive_expression SUB multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
+    ;
+
+expressionList:
+    expression { $$ = alctree(0, "expressionList", 1, $1); }
+    | expressionList COMMA expression { $$ = alctree(0, "expressionList", 2, $1, $3); }
     ;
 
 multiplicative_expression:
@@ -306,8 +308,7 @@ functionCall:
 
 functionCallArguments:
     /* epsilon */ { $$ = NULL; }
-    | expression{ $$ = alctree(0, "functionCallArguments", 1, $1); }
-    | functionCallArguments COMMA expression { $$ = alctree(0, "functionCallArguments", 2, $1, $3); }
+    | expressionList { $$ = $1; }
     ;
 
 
