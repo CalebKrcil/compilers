@@ -9,6 +9,7 @@ SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
     st->nBuckets = nBuckets;
     st->nEntries = 0;
     st->parent = parent;
+    st->scope_name = NULL;  // Will be set later
     st->tbl = calloc(nBuckets, sizeof(SymbolTableEntry));
     if (!st->tbl) {
         fprintf(stderr, "Error: Memory allocation failed for symbol table buckets\n");
@@ -27,15 +28,21 @@ int hash(SymbolTable st, char *s) {
 }
 
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
-    // if (lookup_symbol_current_scope(st, s)) {
-    //     fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
-    //     exit(3);
-    // }
+    if (lookup_symbol_current_scope(st, s)) {
+        fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
+        exit(3);  // Exit with code 3 for semantic errors
+    }
+    
     int index = hash(st, s);
     SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));
+    if (!newEntry) {
+        fprintf(stderr, "Error: Memory allocation failed for symbol table entry\n");
+        exit(EXIT_FAILURE);
+    }
+    
     newEntry->s = strdup(s);
     newEntry->kind = kind;
-    newEntry->type = strdup(type);
+    newEntry->type = type ? strdup(type) : strdup("unknown");
     newEntry->table = st;
     newEntry->next = st->tbl[index];
     st->tbl[index] = newEntry;
@@ -43,6 +50,8 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
 }
 
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
+    if (!st) return NULL;
+    
     int index = hash(st, s);
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
@@ -53,6 +62,8 @@ SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
 }
 
 SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s) {
+    if (!st) return NULL;
+    
     int index = hash(st, s);
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
@@ -65,22 +76,71 @@ SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s) {
 void check_undeclared(SymbolTable st, char *s) {
     if (!lookup_symbol(st, s)) {
         fprintf(stderr, "Error: Undeclared variable '%s'\n", s);
-        exit(3);
+        exit(3);  // Exit with code 3 for semantic errors
     }
 }
 
 void print_symbols(SymbolTable st) {
-    printf("\nSymbol Table:\n====================\n");
+    if (!st || !st->scope_name) return;
+    
+    printf("--- symbol table for: %s ---\n", st->scope_name);
+    
+    // Count total symbols for consistent ordering
+    int symbol_count = 0;
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
-            printf("%s (%s)\n", entry->s, (entry->kind == VARIABLE) ? "Variable" : "Function");
+            symbol_count++;
             entry = entry->next;
         }
     }
+    
+    // If no symbols, just print empty scope
+    if (symbol_count == 0) {
+        printf("---\n\n");
+        return;
+    }
+    
+    // Collect all symbols for alphabetical sorting
+    char **symbols = malloc(symbol_count * sizeof(char*));
+    if (!symbols) {
+        fprintf(stderr, "Error: Memory allocation failed for symbol sorting\n");
+        return;
+    }
+    
+    int idx = 0;
+    for (int i = 0; i < st->nBuckets; i++) {
+        SymbolTableEntry entry = st->tbl[i];
+        while (entry) {
+            symbols[idx++] = entry->s;
+            entry = entry->next;
+        }
+    }
+    
+    // Simple insertion sort for minimal dependencies
+    for (int i = 1; i < symbol_count; i++) {
+        char *key = symbols[i];
+        int j = i - 1;
+        
+        while (j >= 0 && strcmp(symbols[j], key) > 0) {
+            symbols[j + 1] = symbols[j];
+            j--;
+        }
+        symbols[j + 1] = key;
+    }
+    
+    // Print sorted symbols
+    for (int i = 0; i < symbol_count; i++) {
+        printf("    %s\n", symbols[i]);
+    }
+    
+    printf("---\n\n");
+    free(symbols);
 }
 
 void free_symbol_table(SymbolTable st) {
+    if (!st) return;
+    
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
@@ -91,10 +151,41 @@ void free_symbol_table(SymbolTable st) {
             free(temp);
         }
     }
+    
     free(st->tbl);
+    free(st->scope_name);
     free(st);
 }
 
 SymbolTable create_function_scope(SymbolTable parent, char *func_name) {
-    return mksymtab(50, parent);
+    SymbolTable st = mksymtab(50, parent);
+    st->scope_name = malloc(strlen(func_name) + 10); // "func " + name + null
+    if (st->scope_name) {
+        sprintf(st->scope_name, "func %s", func_name);
+    }
+    return st;
+}
+
+void set_package_scope_name(SymbolTable st, char *package_name) {
+    if (st->scope_name) {
+        free(st->scope_name);
+    }
+    st->scope_name = malloc(strlen(package_name) + 15); // "package " + name + null
+    if (st->scope_name) {
+        sprintf(st->scope_name, "package %s", package_name);
+    }
+}
+
+// Add a function to populate predefined symbols
+void add_predefined_symbols(SymbolTable st) {
+    // Add predefined types
+    insert_symbol(st, "Int", FUNCTION, "Type");
+    insert_symbol(st, "Boolean", FUNCTION, "Type");
+    insert_symbol(st, "String", FUNCTION, "Type");
+    insert_symbol(st, "Unit", FUNCTION, "Type");
+    
+    // Add predefined functions
+    insert_symbol(st, "println", FUNCTION, "Unit");
+    insert_symbol(st, "print", FUNCTION, "Unit");
+    insert_symbol(st, "readLine", FUNCTION, "String");
 }
