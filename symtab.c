@@ -30,7 +30,8 @@ int hash(SymbolTable st, char *s) {
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
-        exit(3);  // Exit with code 3 for semantic errors
+        error_count++;  // Increment error count instead of exiting
+        return;  // Don't insert the symbol again
     }
     
     int index = hash(st, s);
@@ -76,14 +77,15 @@ SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s) {
 void check_undeclared(SymbolTable st, char *s) {
     if (!lookup_symbol(st, s)) {
         fprintf(stderr, "Error: Undeclared variable '%s'\n", s);
-        exit(3);  // Exit with code 3 for semantic errors
+        error_count++;  // Increment the error count instead of exiting
     }
 }
 
 void print_symbols(SymbolTable st) {
     if (!st || !st->scope_name) return;
     
-    printf("--- symbol table for: %s ---\n", st->scope_name);
+    // Symbol printing was already handled in the caller (process_file)
+    // Just print the symbols without the header
     
     // Count total symbols for consistent ordering
     int symbol_count = 0;
@@ -95,7 +97,7 @@ void print_symbols(SymbolTable st) {
         }
     }
     
-    // If no symbols, just print empty scope
+    // If no symbols, just print nothing and return
     if (symbol_count == 0) {
         printf("---\n\n");
         return;
