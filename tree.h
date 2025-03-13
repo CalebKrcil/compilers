@@ -6,6 +6,29 @@
 #include <stdarg.h>
 #include "symtab.h"
 
+// Token categories from the lexer
+enum TokenCategory {
+    Identifier = 396,  // This should match your lexer token definition
+    IntegerLiteral,
+    RealLiteral,
+    CharacterLiteral
+};
+
+// Production rules from the parser
+enum ProductionRule {
+    VAR,
+    VAL,
+    FUN,
+    PACKAGE,
+    CLASS,
+    IF,
+    ELSE,
+    WHILE,
+    FOR,
+    RETURN
+    // Add other production rules as needed
+};
+
 struct token {
     int category;
     char *text;
@@ -28,11 +51,18 @@ struct tree {
     struct token *leaf;
 };
 
+// Function prototypes
 int alctoken(int category, char *text);
 struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
 void print_graph(struct tree *t, char *filename);
 void printsyms(struct tree *t, SymbolTable st);
+char *get_type_name(struct tree *type_node);
+void print_branch(struct tree *t, FILE *f);
+void print_leaf(struct tree *t, FILE *f);
+void print_graph2(struct tree *t, FILE *f);
+char *pretty_print_name(struct tree *t);
+char *escape(char *s);
 
 #endif
