@@ -52,8 +52,13 @@ void printsymbol(char *s) {
 
 // Helper function to determine variable type
 char *get_type_name(struct tree *type_node) {
-    if (!type_node || !type_node->leaf) return "unknown";
-    return type_node->leaf->text;
+    if (!type_node) return "unknown";
+    if (type_node->leaf) return type_node->leaf->text;
+    // If it's not a direct leaf, try to get the type name from a child node
+    if (type_node->nkids > 0 && type_node->kids[0] && type_node->kids[0]->leaf) {
+        return type_node->kids[0]->leaf->text;
+    }
+    return "unknown";
 }
 
 // Recursive function to traverse and print symbols
