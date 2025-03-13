@@ -30,8 +30,11 @@ int hash(SymbolTable st, char *s) {
 }
 
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
-    printf("Inserting symbol: %s, Type: %s\n", s, type);
-    printf("[DEBUG] Storing symbol: %s of type %s in %s\n", s, type, st->scope_name);
+    // printf("Inserting symbol: %s, Type: %s\n", s, type);
+    // printf("[DEBUG] Storing symbol: %s of type %s in %s\n", s, type, 
+           // st->scope_name ? st->scope_name : "(null)");
+           
+    // Check for duplicates in current scope only
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
         error_count++;  // Increment error count instead of exiting
@@ -91,19 +94,20 @@ void print_symbols(SymbolTable st) {
     // Print the header for the scope
     printf("--- symbol table for: %s ---\n", st->scope_name);
 
+    for (int i = 0; i < st->nBuckets; i++) {
+        SymbolTableEntry entry = st->tbl[i];
+        while (entry) {
+            // printf("[BUCKET %d] %s : %s\n", i, entry->s, entry->type);
+            entry = entry->next;
+        }
+    }
+
     // Count total symbols
     int symbol_count = 0;
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
             symbol_count++;
-            entry = entry->next;
-        }
-    }
-    for (int i = 0; i < st->nBuckets; i++) {
-        SymbolTableEntry entry = st->tbl[i];
-        while (entry) {
-            printf("[BUCKET %d] %s : %s\n", i, entry->s, entry->type);
             entry = entry->next;
         }
     }

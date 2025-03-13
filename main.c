@@ -213,31 +213,22 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
     int parse_result = yyparse();
     if (parse_result == 0) {
 
-        printsyms(root, packageSymtab);
+        // Process symbols and collect function symbol tables
+        FuncSymbolTableList func_symtabs = printsyms(root, packageSymtab);
         
         if (error_count == 0) {
             printf("No errors\n");
 
             // Print symbol tables if requested
             if (print_symtab) {
+                // Print package symbol table
                 print_symbols(packageSymtab);
-
-                // Traverse function declarations
-                for (int i = 0; i < root->nkids; i++) {
-                    struct tree *func_node = root->kids[i];
-                    if (func_node && func_node->prodrule == FUN && func_node->nkids > 0 && func_node->kids[0] && func_node->kids[0]->leaf) {
-                        char *func_name = func_node->kids[0]->leaf->text;
-                        SymbolTable funcSymtab = create_function_scope(packageSymtab, func_name);
-                        
-                        // Process function parameters and body to collect symbols
-                        printsyms(func_node, funcSymtab);
-                        
-                        if (print_symtab) {
-                            print_symbols(funcSymtab);
-                        }
-                        
-                        free_symbol_table(funcSymtab);
-                    }
+                
+                // Print all function symbol tables
+                FuncSymbolTableList current = func_symtabs;
+                while (current) {
+                    print_symbols(current->symtab);
+                    current = current->next;
                 }
             }
 
@@ -256,6 +247,9 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
             fprintf(stderr, "\nParsing completed with %d semantic error(s)\n", error_count);
             parse_result = 3;  // Exit code 3 for semantic errors
         }
+        
+        // Free the function symbol table list
+        free_func_symtab_list(func_symtabs);
     } else {
         fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }

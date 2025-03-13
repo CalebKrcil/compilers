@@ -28,13 +28,18 @@ struct tree {
     struct token *leaf;
 };
 
-// Function prototypes
+typedef struct func_symtab_list {
+    SymbolTable symtab;
+    struct func_symtab_list *next;
+} *FuncSymbolTableList;
+
+FuncSymbolTableList printsyms(struct tree *t, SymbolTable st);
+void free_func_symtab_list(FuncSymbolTableList list);
 int alctoken(int category, char *text);
 struct tree *alctree(int prodrule, char *symbolname, int nkids, ...);
 void freetree(struct tree *t);
 void printtree(struct tree *t, int depth);
 void print_graph(struct tree *t, char *filename);
-void printsyms(struct tree *t, SymbolTable st);
 char *get_type_name(struct tree *type_node);
 void print_branch(struct tree *t, FILE *f);
 void print_leaf(struct tree *t, FILE *f);

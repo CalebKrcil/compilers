@@ -61,9 +61,12 @@ char *get_type_name(struct tree *type_node) {
     return "unknown";
 }
 
-// Recursive function to traverse and print symbols
-void printsyms(struct tree *t, SymbolTable st) {
-    if (!t) return;
+FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
+    if (!t) return NULL;
+
+    // Create a list to track function symbol tables
+    static FuncSymbolTableList func_list_head = NULL;
+    static FuncSymbolTableList func_list_tail = NULL;
 
     // Track the current scope (default is the given symbol table)
     SymbolTable current_scope = st;
@@ -84,12 +87,26 @@ void printsyms(struct tree *t, SymbolTable st) {
         }
 
         if (func_name) {
-            printf("Processing function: %s\n", func_name);
+            //printf("Processing function: %s\n", func_name);
             insert_symbol(st, func_name, FUNCTION, return_type);
-            printf("Created function scope for: %s\n", func_name);
+            //printf("Created function scope for: %s\n", func_name);
 
             // Create a new symbol table for this function scope
             current_scope = create_function_scope(st, func_name);
+            
+            // Add to our function symbol table list
+            FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
+            if (new_node) {
+                new_node->symtab = current_scope;
+                new_node->next = NULL;
+                
+                if (func_list_tail) {
+                    func_list_tail->next = new_node;
+                    func_list_tail = new_node;
+                } else {
+                    func_list_head = func_list_tail = new_node;
+                }
+            }
         }
 
         // Process function parameters (parameters belong in function scope)
@@ -101,8 +118,8 @@ void printsyms(struct tree *t, SymbolTable st) {
                     char *param_name = param_node->kids[0]->leaf->text;
                     char *param_type = get_type_name(param_node->kids[1]);
 
-                    printf("Inserting function parameter: %s of type %s into %s\n",
-                           param_name, param_type, current_scope->scope_name);
+                    // printf("Inserting function parameter: %s of type %s into %s\n",
+                    //        param_name, param_type, current_scope->scope_name);
                     insert_symbol(current_scope, param_name, VARIABLE, param_type);
                 }
             }
@@ -126,8 +143,8 @@ void printsyms(struct tree *t, SymbolTable st) {
             }
 
             // Insert into the correct scope (function or global)
-            printf("Inserting variable: %s of type %s into %s\n",
-                   var_name, var_type, current_scope->scope_name);
+            // printf("Inserting variable: %s of type %s into %s\n",
+            //        var_name, var_type, current_scope->scope_name);
             insert_symbol(current_scope, var_name, VARIABLE, var_type);
         }
     }
@@ -139,8 +156,8 @@ void printsyms(struct tree *t, SymbolTable st) {
 
             // If variable is not already declared in the current scope, insert it
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
-                printf("Implicitly declaring variable: %s in %s\n",
-                       var_name, current_scope->scope_name);
+                // printf("Implicitly declaring variable: %s in %s\n",
+                //        var_name, current_scope->scope_name);
                 insert_symbol(current_scope, var_name, VARIABLE, "unknown");  // Type unknown at this stage
             }
         }
@@ -157,6 +174,19 @@ void printsyms(struct tree *t, SymbolTable st) {
     // Recursively visit child nodes using the correct scope
     for (int i = 0; i < t->nkids; i++) {
         printsyms(t->kids[i], current_scope);
+    }
+    
+    return func_list_head;
+}
+
+// Add this helper function to free the function symbol table list
+void free_func_symtab_list(FuncSymbolTableList list) {
+    while (list) {
+        FuncSymbolTableList next = list->next;
+        // Note: We don't free the symbol tables themselves here,
+        // as that's handled elsewhere
+        free(list);
+        list = next;
     }
 }
 
