@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include "k0gram.tab.h"
 #include "tree.h"
+#include "symtab.h"
 #define EXTENSION ".kt"
 
 extern int yylex();
@@ -155,7 +156,6 @@ void add_token(int category, char *text, int lineno, const char *filename) {
         new_token->value.dval = atof(text);
     }
     else if (category == CharacterLiteral) {
-        printf("%s", text);
         new_token->value.sval = process_escape_sequences(text);
     }
 
@@ -169,28 +169,6 @@ void add_token(int category, char *text, int lineno, const char *filename) {
         head = tail = new_node;
     }
 }
-
-// void print_tokens() {
-//     printf("Category\tText\t\tLinenum\tFilename\tIval/Sval\n");
-//     printf("-------------------------------------------------------------------------\n");
-
-//     struct tokenlist *current = head;
-//     while (current) {
-//         struct token *t = current->t;
-//         printf("%-8d\t%-8s\t%-4d\t%-12s", t->category, t->text, t->lineno, t->filename);
-//         if (t->category == IntegerLiteral) {
-//             printf("\t%d", t->ival);
-//         } 
-//         else if (t->category == RealLiteral) {
-//             printf("\t%lf", t->dval);
-//         }
-//         else if (t->category == CharacterLiteral && t->sval) {
-//             printf("\t%s", t->sval);
-//         }
-//         printf("\n");
-//         current = current->next;
-//     }
-// }
 
 void free_tokens() {
     struct tokenlist *current = head;
@@ -206,32 +184,7 @@ void free_tokens() {
     head = tail = NULL;  // Ensure the list is reset
 }
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <input_file> [-tree] [-symtab] [-dot]\n", argv[0]);
-        return 1;
-    }
-
-    int print_tree = 0, print_symtab = 0, generate_dot = 0;
-    char *filename = NULL;
-
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-tree") == 0) {
-            print_tree = 1;
-        } else if (strcmp(argv[i], "-symtab") == 0) {
-            print_symtab = 1;
-        } else if (strcmp(argv[i], "-dot") == 0) {
-            generate_dot = 1;
-        } else {
-            filename = argv[i];
-        }
-    }
-
-    if (!filename) {
-        fprintf(stderr, "Error: No input file provided\n");
-        return 1;
-    }
-
+int process_file(char *filename, int print_tree, int print_symtab, int generate_dot) {
     char filepath[256];
     strncpy(filepath, filename, sizeof(filepath) - 1);
     filepath[sizeof(filepath) - 1] = '\0';
@@ -250,49 +203,103 @@ int main(int argc, char *argv[]) {
     // Create global and package symbol tables
     SymbolTable globalSymtab = mksymtab(50, NULL);
     SymbolTable packageSymtab = mksymtab(50, globalSymtab);
+    set_package_scope_name(packageSymtab, "main");  // Default package name is "main"
+    add_predefined_symbols(globalSymtab);
+
+    // Reset error count and parser state
+    error_count = 0;
+    yylineno = 1;
 
     int parse_result = yyparse();
     if (parse_result == 0) {
-        printf("Parsing completed successfully!\n");
-        printsyms(root, packageSymtab);
+        if (error_count == 0) {
+            printf("No errors\n");
+            // Process the AST for symbols
+            printsyms(root, packageSymtab);
 
-        if (print_symtab) {
-            printf("--- symbol table for: package main ---\n");
-            print_symbols(packageSymtab);
-        }
-
-        // Correctly traverse function declarations
-        for (int i = 0; i < root->nkids; i++) {
-            struct tree *func_node = root->kids[i];
-            if (func_node->prodrule == FUN) {
-                char *func_name = func_node->kids[0]->leaf->text;
-                SymbolTable funcSymtab = create_function_scope(packageSymtab, func_name);
-                printsyms(func_node, funcSymtab);
-
-                if (print_symtab) {
-                    printf("--- symbol table for: func %s ---\n", func_name);
-                    print_symbols(funcSymtab);
-                }
-                free_symbol_table(funcSymtab);
+            // Print symbol tables if requested
+            if (print_symtab) {
+                printf("--- symbol table for: package main ---\n");
+                print_symbols(packageSymtab);
             }
-        }
 
-        if (print_tree) {
-            printtree(root, 0);
-        }
-        if (generate_dot) {
-            char dot_filename[300];
-            snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filepath);
-            print_graph(root, dot_filename);
-            printf("DOT file generated: %s\n", dot_filename);
+            // Traverse function declarations
+            for (int i = 0; i < root->nkids; i++) {
+                struct tree *func_node = root->kids[i];
+                if (func_node->prodrule == FUN) {
+                    char *func_name = func_node->kids[0]->leaf->text;
+                    SymbolTable funcSymtab = create_function_scope(packageSymtab, func_name);
+                    printsyms(func_node, funcSymtab);
+
+                    if (print_symtab) {
+                        printf("--- symbol table for: func %s ---\n", func_name);
+                        print_symbols(funcSymtab);
+                    }
+                    free_symbol_table(funcSymtab);
+                }
+            }
+
+            if (print_tree) {
+                printf("Syntax tree for %s:\n", filepath);
+                printtree(root, 0);
+            }
+            if (generate_dot) {
+                char dot_filename[300];
+                snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filepath);
+                print_graph(root, dot_filename);
+                printf("DOT file generated: %s\n", dot_filename);
+            }
+        } else {
+            // We have semantic errors
+            fprintf(stderr, "\nParsing completed with %d semantic error(s)\n", error_count);
+            parse_result = 3;  // Exit code 3 for semantic errors
         }
     } else {
         fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }
 
+    // Cleanup
     fclose(yyin);
     free(current_filename);
     free_symbol_table(packageSymtab);
     free_symbol_table(globalSymtab);
+    freetree(root);
+    root = NULL;
+    free_tokens();
+
     return parse_result;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <input_file> [-tree] [-symtab] [-dot]\n", argv[0]);
+        return 1;
+    }
+
+    int print_tree = 0, print_symtab = 0, generate_dot = 0;
+    int highest_error_code = 0;
+    int i;
+
+    // Process command line arguments
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-tree") == 0) {
+            print_tree = 1;
+        } else if (strcmp(argv[i], "-symtab") == 0) {
+            print_symtab = 1;
+        } else if (strcmp(argv[i], "-dot") == 0) {
+            generate_dot = 1;
+        }
+    }
+
+    // Process all files
+    for (i = 1; i < argc; i++) {
+        if (argv[i][0] != '-') {  // Skip command-line options
+            int result = process_file(argv[i], print_tree, print_symtab, generate_dot);
+            if (result > highest_error_code) {
+                highest_error_code = result;
+            }
+        }
+    }
+
+    return highest_error_code;
 }
