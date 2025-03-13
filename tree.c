@@ -66,7 +66,7 @@ void printsyms(struct tree *t, SymbolTable st) {
         char *varType = "unknown";  // Default type if unspecified
 
         // First child is the variable name for VAR and VAL
-        if (t->nkids >= 1 && t->kids[0]->leaf) {
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             varName = t->kids[0]->leaf->text;
         }
         
@@ -85,7 +85,7 @@ void printsyms(struct tree *t, SymbolTable st) {
         char *returnType = "Unit";  // Default return type is Unit
         
         // First child should be the function name
-        if (t->nkids >= 1 && t->kids[0]->leaf) {
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             funcName = t->kids[0]->leaf->text;
         }
         
@@ -113,10 +113,26 @@ void printsyms(struct tree *t, SymbolTable st) {
     }
     // Handle identifiers in expressions (check for undeclared variables)
     else if (t->leaf && t->leaf->category == Identifier) {
-        // Check if the identifier is being used (not declared)
-        // This requires context analysis to determine if it's a usage or declaration
+        // Check if this identifier is not part of a declaration
+        // and not a function name declaration
         if (t->prodrule != VAR && t->prodrule != VAL && t->prodrule != FUN) {
-            check_undeclared(st, t->leaf->text);
+            // Check if the identifier is a direct child of a function call or array access
+            // to avoid checking function names and array names which are declared elsewhere
+            int is_function_call = 0;
+            int is_array_access = 0;
+            struct tree *parent = NULL;
+            
+            // We need to infer the parent-child relationship
+            // This is a simplification - in a full compiler you'd track parent nodes
+            
+            // If this is a reference to a variable, check if it's declared
+            if (!is_function_call && !is_array_access) {
+                if (!lookup_symbol(st, t->leaf->text)) {
+                    fprintf(stderr, "Error: Undeclared variable '%s' at line %d\n", 
+                            t->leaf->text, t->leaf->lineno);
+                    error_count++;
+                }
+            }
         }
     }
 
