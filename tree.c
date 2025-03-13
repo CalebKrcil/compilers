@@ -120,27 +120,48 @@ void printsyms(struct tree *t, SymbolTable st) {
         }
     }
     // Handle identifiers in expressions (check for undeclared variables)
-    else if (t->leaf && t->leaf->category == Identifier) {
-        // Check if this identifier is not part of a declaration
-        // and not a function name declaration
-        if (t->prodrule != VAR && t->prodrule != VAL && t->prodrule != FUN) {
-            // Check if the identifier is a direct child of a function call or array access
-            // to avoid checking function names and array names which are declared elsewhere
-            int is_function_call = 0;
-            int is_array_access = 0;
-            struct tree *parent = NULL;
-            
-            // We need to infer the parent-child relationship
-            // This is a simplification - in a full compiler you'd track parent nodes
-            
-            // If this is a reference to a variable, check if it's declared
-            if (!is_function_call && !is_array_access) {
-                if (!lookup_symbol(st, t->leaf->text)) {
-                    fprintf(stderr, "Error: Undeclared variable '%s' at line %d\n", 
-                            t->leaf->text, t->leaf->lineno);
-                    error_count++;
+    else if (t->prodrule == FUN) {
+        if (t->nkids >= 1) {
+            // The function name should be in the first child
+            struct tree *func_name_node = t->kids[0];
+            if (func_name_node && func_name_node->leaf) {
+                char *func_name = func_name_node->leaf->text;
+                // Default return type is "Unit"
+                char *return_type = "Unit";
+                
+                // Try to get return type if available
+                if (t->nkids >= 3 && t->kids[2]) {
+                    return_type = get_type_name(t->kids[2]);
+                }
+                
+                // Insert the function into the symbol table
+                printf("Found function: %s returning %s\n", func_name, return_type);
+                insert_symbol(st, func_name, FUNCTION, return_type);
+                
+                // Process parameters if available
+                if (t->nkids >= 2 && t->kids[1]) {
+                    struct tree *params_node = t->kids[1];
+                    for (int i = 0; i < params_node->nkids; i++) {
+                        struct tree *param_node = params_node->kids[i];
+                        if (param_node && param_node->nkids >= 2) {
+                            // Parameter name and type
+                            char *param_name = param_node->kids[0]->leaf->text;
+                            char *param_type = get_type_name(param_node->kids[1]);
+                            
+                            printf("Found parameter: %s of type %s\n", param_name, param_type);
+                            insert_symbol(st, param_name, VARIABLE, param_type);
+                        }
+                    }
                 }
             }
+        }
+    }
+    // Check for variable usage (identifier references)
+    else if (t->leaf && t->leaf->category == Identifier) {
+        // Make sure this is not part of a declaration
+        if (t->prodrule != VAR && t->prodrule != VAL && t->prodrule != FUN) {
+            // Check if this identifier is declared
+            check_undeclared(st, t->leaf->text);
         }
     }
 
