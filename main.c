@@ -212,10 +212,11 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
     int parse_result = yyparse();
     if (parse_result == 0) {
+
+        printsyms(root, packageSymtab);
+        
         if (error_count == 0) {
             printf("No errors\n");
-            // Process the AST for symbols
-            printsyms(root, packageSymtab);
 
             // Print symbol tables if requested
             if (print_symtab) {
@@ -225,15 +226,18 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
                 // Traverse function declarations
                 for (int i = 0; i < root->nkids; i++) {
                     struct tree *func_node = root->kids[i];
-                    if (func_node->prodrule == FUN) {
+                    if (func_node && func_node->prodrule == FUN && func_node->nkids > 0 && func_node->kids[0] && func_node->kids[0]->leaf) {
                         char *func_name = func_node->kids[0]->leaf->text;
                         SymbolTable funcSymtab = create_function_scope(packageSymtab, func_name);
+                        
+                        // Process function parameters and body to collect symbols
                         printsyms(func_node, funcSymtab);
-    
+                        
                         if (print_symtab) {
                             printf("--- symbol table for: func %s ---\n", func_name);
                             print_symbols(funcSymtab);
                         }
+                        
                         free_symbol_table(funcSymtab);
                     }
                 }
