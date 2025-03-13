@@ -20,6 +20,7 @@ typedef struct sym_table {
     int nEntries;
     struct sym_table *parent;
     struct sym_entry **tbl;
+    char *scope_name;  // Added to identify the scope (package, function, etc.)
 } *SymbolTable;
 
 SymbolTable mksymtab(int nBuckets, SymbolTable parent);
@@ -31,5 +32,7 @@ void print_symbols(SymbolTable st);
 void free_symbol_table(SymbolTable st);
 int hash(SymbolTable st, char *s);
 SymbolTable create_function_scope(SymbolTable parent, char *func_name);
+void set_package_scope_name(SymbolTable st, char *package_name);
+void add_predefined_symbols(SymbolTable st);
 
 #endif
