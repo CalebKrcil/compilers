@@ -178,6 +178,15 @@ void free_symbol_table(SymbolTable st) {
             entry = entry->next;
             free(temp->s);
             free(temp->type);
+            
+            // Free parameter types
+            if (temp->param_count > 0 && temp->param_types) {
+                for (int j = 0; j < temp->param_count; j++) {
+                    free(temp->param_types[j]);
+                }
+                free(temp->param_types);
+            }
+            
             free(temp);
         }
     }
@@ -206,16 +215,99 @@ void set_package_scope_name(SymbolTable st, char *package_name) {
     }
 }
 
-// Add a function to populate predefined symbols
 void add_predefined_symbols(SymbolTable st) {
-    // Add predefined types
-    insert_symbol(st, "Int", FUNCTION, "Type");
-    insert_symbol(st, "Boolean", FUNCTION, "Type");
-    insert_symbol(st, "String", FUNCTION, "Type");
-    insert_symbol(st, "Unit", FUNCTION, "Type");
+    // Basic types
+    insert_symbol(st, "Int", CLASS_TYPE, "Type");
+    insert_symbol(st, "Double", CLASS_TYPE, "Type");
+    insert_symbol(st, "Boolean", CLASS_TYPE, "Type");
+    insert_symbol(st, "String", CLASS_TYPE, "Type");
+    insert_symbol(st, "Char", CLASS_TYPE, "Type");
+    insert_symbol(st, "Unit", CLASS_TYPE, "Type");
     
-    // Add predefined functions
-    insert_symbol(st, "println", FUNCTION, "Unit");
-    insert_symbol(st, "print", FUNCTION, "Unit");
-    insert_symbol(st, "readLine", FUNCTION, "String");
+    // Global functions - using new helper function for consistency
+    char *print_params[] = {"String"};
+    insert_method_symbol(st, "", "print", "Unit", 1, print_params);
+    
+    char *println_params[] = {"String"};
+    insert_method_symbol(st, "", "println", "Unit", 1, println_params);
+    
+    // readln with no parameters
+    insert_method_symbol(st, "", "readln", "String", 0, NULL);
+    
+    // String methods
+    char *get_params[] = {"Int"};
+    insert_method_symbol(st, "String", "get", "Char", 1, get_params);
+    
+    char *equals_params[] = {"String"};
+    insert_method_symbol(st, "String", "equals", "Boolean", 1, equals_params);
+    
+    // No parameters for length
+    insert_method_symbol(st, "String", "length", "Int", 0, NULL);
+    
+    char *toString_params[] = {"Int"};  // Assuming it converts an int to string
+    insert_method_symbol(st, "String", "toString", "String", 1, toString_params);
+    
+    // Assuming valueOf converts various types to String
+    char *valueOf_params[] = {"Any"};
+    insert_method_symbol(st, "String", "valueOf", "String", 1, valueOf_params);
+    
+    char *substring_params[] = {"Int", "Int"};
+    insert_method_symbol(st, "String", "substring", "String", 2, substring_params);
+    
+    // java.util.Random methods
+    insert_symbol(st, "java.util.Random", CLASS_TYPE, "Type");
+    insert_method_symbol(st, "java.util.Random", "nextInt", "Int", 0, NULL);
+    
+    // java.lang.Math methods
+    insert_symbol(st, "java.lang.Math", CLASS_TYPE, "Type");
+    
+    char *abs_params[] = {"Double"};
+    insert_method_symbol(st, "java.lang.Math", "abs", "Double", 1, abs_params);
+    
+    char *max_params[] = {"Double", "Double"};
+    insert_method_symbol(st, "java.lang.Math", "max", "Double", 2, max_params);
+    
+    char *min_params[] = {"Double", "Double"};
+    insert_method_symbol(st, "java.lang.Math", "min", "Double", 2, min_params);
+    
+    char *pow_params[] = {"Double", "Double"};
+    insert_method_symbol(st, "java.lang.Math", "pow", "Double", 2, pow_params);
+    
+    char *trig_params[] = {"Double"};
+    insert_method_symbol(st, "java.lang.Math", "cos", "Double", 1, trig_params);
+    insert_method_symbol(st, "java.lang.Math", "sin", "Double", 1, trig_params);
+    insert_method_symbol(st, "java.lang.Math", "tan", "Double", 1, trig_params);
+}
+
+void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, 
+    char *return_type, int param_count, char **param_types) {
+    char full_name[256];
+    sprintf(full_name, "%s.%s", class_name, method_name);
+
+    int index = hash(st, full_name);
+    SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));
+    if (!newEntry) {
+        fprintf(stderr, "Error: Memory allocation failed for symbol table entry\n");
+        exit(EXIT_FAILURE);
+    }
+
+    newEntry->s = strdup(full_name);
+    newEntry->kind = METHOD;
+    newEntry->type = return_type ? strdup(return_type) : strdup("unknown");
+    newEntry->param_count = param_count;
+
+    // Allocate and copy parameter types
+    if (param_count > 0) {
+        newEntry->param_types = malloc(param_count * sizeof(char*));
+        for (int i = 0; i < param_count; i++) {
+            newEntry->param_types[i] = strdup(param_types[i]);
+        }
+    } else {
+        newEntry->param_types = NULL;
+    }
+
+    newEntry->table = st;
+    newEntry->next = st->tbl[index];
+    st->tbl[index] = newEntry;
+    st->nEntries++;
 }

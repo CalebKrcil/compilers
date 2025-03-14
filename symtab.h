@@ -5,12 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum { VARIABLE, FUNCTION } SymbolKind;
+typedef enum { VARIABLE, FUNCTION, METHOD, CLASS_TYPE } SymbolKind;
 
 typedef struct sym_entry {
     char *s;
     SymbolKind kind;
-    char *type;
+    char *type;           // Return type
+    int param_count;      // Number of parameters
+    char **param_types;   // Parameter types
     struct sym_table *table;
     struct sym_entry *next;
 } *SymbolTableEntry;
@@ -34,5 +36,6 @@ int hash(SymbolTable st, char *s);
 SymbolTable create_function_scope(SymbolTable parent, char *func_name);
 void set_package_scope_name(SymbolTable st, char *package_name);
 void add_predefined_symbols(SymbolTable st);
+void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, char *return_type, int param_count, char **param_types);
 
 #endif

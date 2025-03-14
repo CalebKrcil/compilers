@@ -202,6 +202,7 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
     // Create global and package symbol tables
     SymbolTable globalSymtab = mksymtab(50, NULL);
+    set_package_scope_name(globalSymtab, "global");
     SymbolTable packageSymtab = mksymtab(50, globalSymtab);
     set_package_scope_name(packageSymtab, "main");  // Default package name is "main"
     add_predefined_symbols(globalSymtab);
@@ -221,6 +222,7 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
             // Print symbol tables if requested
             if (print_symtab) {
+                print_symbols(globalSymtab);
                 // Print package symbol table
                 print_symbols(packageSymtab);
                 
