@@ -18,7 +18,6 @@ extern struct tree *root;
 
 char *current_filename = NULL;
 
-// Add these globals to track parsing state
 int error_count = 0;
 #define MAX_ERROR_MSG_LENGTH 1024
 char last_token[256] = "";
@@ -37,7 +36,6 @@ void yyerror(const char *s) {
     fprintf(stderr, "\nError #%d at line %d: %s\n", error_count, yylineno, s);
     fprintf(stderr, "Near token: '%s'\n", near_text);
 
-    // Print the line where the error occurred
     FILE *f = fopen(current_filename, "r");
     if (f) {
         char line[1024];
@@ -45,7 +43,6 @@ void yyerror(const char *s) {
         while (fgets(line, sizeof(line), f) && current_line <= yylineno) {
             if (current_line == yylineno) {
                 fprintf(stderr, "Line %d: %s", yylineno, line);
-                // Print an arrow pointing to the error position
                 int i;
                 for (i = 0; i < strlen("Line ") + floor(log10(yylineno)) + 2; i++) {
                     fprintf(stderr, " ");
@@ -58,9 +55,7 @@ void yyerror(const char *s) {
         fclose(f);
     }
 
-    // Provide hint based on error type
     if (strstr(s, "syntax error")) {
-        // More specific hints
         if (strcmp(last_token, "fun") == 0) {
             fprintf(stderr, "Note: Function declarations require a name, parameter list, and body\n");
         }
@@ -71,10 +66,8 @@ void yyerror(const char *s) {
             fprintf(stderr, "Hint: Check for missing semicolons, brackets, or incorrect token ordering\n");
         }
 
-        // Return exit code 2 for syntax errors
         exit(2);
     } else {
-        // Return exit code 1 for lexical errors
         exit(1);
     }
 }
@@ -128,15 +121,13 @@ char *process_escape_sequences(const char *input) {
     return output;
 }
 
-// Add this function to track the last token seen
 void update_last_token(const char *token_text) {
     strncpy(last_token, token_text, sizeof(last_token) - 1);
     last_token[sizeof(last_token) - 1] = '\0';
 }
 
-// Modified add_token function
 void add_token(int category, char *text, int lineno, const char *filename) {
-    update_last_token(text);  // Track the token
+    update_last_token(text);  
     
     struct token *new_token = malloc(sizeof(struct token));
     struct tokenlist *new_node = malloc(sizeof(struct tokenlist));
@@ -181,7 +172,7 @@ void free_tokens() {
         free(current);
         current = next;
     }
-    head = tail = NULL;  // Ensure the list is reset
+    head = tail = NULL; 
 }
 
 int process_file(char *filename, int print_tree, int print_symtab, int generate_dot) {
@@ -200,33 +191,27 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
     printf("Processing file: %s\n", filepath);
 
-    // Create global and package symbol tables
     SymbolTable globalSymtab = mksymtab(50, NULL);
     set_package_scope_name(globalSymtab, "global");
     SymbolTable packageSymtab = mksymtab(50, globalSymtab);
-    set_package_scope_name(packageSymtab, "main");  // Default package name is "main"
+    set_package_scope_name(packageSymtab, "main"); 
     add_predefined_symbols(globalSymtab);
 
-    // Reset error count and parser state
     error_count = 0;
     yylineno = 1;
 
     int parse_result = yyparse();
     if (parse_result == 0) {
 
-        // Process symbols and collect function symbol tables
         FuncSymbolTableList func_symtabs = printsyms(root, packageSymtab);
         
         if (error_count == 0) {
             printf("No errors\n");
 
-            // Print symbol tables if requested
             if (print_symtab) {
                 print_symbols(globalSymtab);
-                // Print package symbol table
                 print_symbols(packageSymtab);
                 
-                // Print all function symbol tables
                 FuncSymbolTableList current = func_symtabs;
                 while (current) {
                     print_symbols(current->symtab);
@@ -245,18 +230,15 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
                 printf("DOT file generated: %s\n", dot_filename);
             }
         } else {
-            // We have semantic errors
             fprintf(stderr, "\nParsing completed with %d semantic error(s)\n", error_count);
-            parse_result = 3;  // Exit code 3 for semantic errors
+            parse_result = 3;  
         }
         
-        // Free the function symbol table list
         free_func_symtab_list(func_symtabs);
     } else {
         fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }
 
-    // Cleanup
     fclose(yyin);
     free(current_filename);
     free_symbol_table(packageSymtab);
@@ -278,7 +260,6 @@ int main(int argc, char *argv[]) {
     int highest_error_code = 0;
     int i;
 
-    // Process command line arguments
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-tree") == 0) {
             print_tree = 1;
@@ -289,9 +270,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Process all files
     for (i = 1; i < argc; i++) {
-        if (argv[i][0] != '-') {  // Skip command-line options
+        if (argv[i][0] != '-') {  
             int result = process_file(argv[i], print_tree, print_symtab, generate_dot);
             if (result > highest_error_code) {
                 highest_error_code = result;

@@ -6,8 +6,8 @@
 #include "tree.h"
 
 extern int yylineno;
-extern char *current_filename;  // Add this
-extern void update_last_token(const char *token_text);  // Add this
+extern char *current_filename;  
+extern void update_last_token(const char *token_text);  
 int yylex();
 extern YYSTYPE yylval;
 void yyerror(const char *s);

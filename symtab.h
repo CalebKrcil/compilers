@@ -10,9 +10,9 @@ typedef enum { VARIABLE, FUNCTION, METHOD, CLASS_TYPE } SymbolKind;
 typedef struct sym_entry {
     char *s;
     SymbolKind kind;
-    char *type;           // Return type
-    int param_count;      // Number of parameters
-    char **param_types;   // Parameter types
+    char *type;           
+    int param_count;      
+    char **param_types;   
     struct sym_table *table;
     struct sym_entry *next;
 } *SymbolTableEntry;
@@ -22,7 +22,7 @@ typedef struct sym_table {
     int nEntries;
     struct sym_table *parent;
     struct sym_entry **tbl;
-    char *scope_name;  // Added to identify the scope (package, function, etc.)
+    char *scope_name;  
 } *SymbolTable;
 
 SymbolTable mksymtab(int nBuckets, SymbolTable parent);

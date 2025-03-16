@@ -13,30 +13,35 @@ SYMTAB_SRC = symtab.c
 LEX_OUT = k0lex.c
 YACC_OUT = k0gram.tab.c
 YACC_HEADER = k0gram.tab.h
-TREE_HEADER = tree.h
-SYMTAB_HEADER = symtab.h
 
-OBJS = $(YACC_OUT:.c=.o) $(LEX_OUT:.c=.o) $(TREE_SRC:.c=.o) $(MAIN_SRC:.c=.o) $(SYMTAB_SRC:.c=.o)
+OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) -o $(TARGET) $(OBJS) -lfl -lm
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) -lfl -lm
 
-$(LEX_OUT): $(LEX_SRC) $(YACC_HEADER) $(TREE_HEADER) $(SYMTAB_HEADER)
+$(LEX_OUT): $(LEX_SRC) $(YACC_HEADER)
 	$(LEX) -o $(LEX_OUT) $(LEX_SRC)
 
-$(YACC_OUT) $(YACC_HEADER): $(YACC_SRC) $(TREE_HEADER) $(SYMTAB_HEADER)
+$(YACC_OUT) $(YACC_HEADER): $(YACC_SRC)
 	$(YACC) -d $(YACC_SRC)
 
-tree.o: $(TREE_SRC) $(TREE_HEADER) $(SYMTAB_HEADER)
-	$(CC) -c -o tree.o $(TREE_SRC)
+# Explicitly specify compilation for each object file with CFLAGS
+k0gram.tab.o: $(YACC_OUT)
+	$(CC) $(CFLAGS) -c $(YACC_OUT)
 
-symtab.o: $(SYMTAB_SRC) $(SYMTAB_HEADER)
-	$(CC) -c -o symtab.o $(SYMTAB_SRC)
+k0lex.o: $(LEX_OUT)
+	$(CC) $(CFLAGS) -c $(LEX_OUT)
 
-%.o: %.c
-	$(CC) -c -o $@ $<
+tree.o: $(TREE_SRC)
+	$(CC) $(CFLAGS) -c $(TREE_SRC)
+
+main.o: $(MAIN_SRC)
+	$(CC) $(CFLAGS) -c $(MAIN_SRC)
+
+symtab.o: $(SYMTAB_SRC)
+	$(CC) $(CFLAGS) -c $(SYMTAB_SRC)
 
 clean:
-	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET) tree.o symtab.o
+	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET)
