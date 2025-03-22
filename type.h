@@ -1,11 +1,10 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include "tree.h"
-#include "symtab.h"
 
 struct tree;
 struct sym_table;
+typedef struct sym_table *SymbolTable;
 
 typedef struct param {
    char *name;

@@ -5,8 +5,10 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-typedef struct typeinfo *typeptr;
+struct sym_table;
 typedef struct sym_table *SymbolTable;
+struct typeinfo;
+typedef struct typeinfo *typeptr;
 
 struct token {
     int category;

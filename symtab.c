@@ -1,5 +1,6 @@
 #include "symtab.h"
 #include "type.h"
+#include "tree.h"
 
 extern int error_count;
 

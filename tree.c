@@ -2,6 +2,7 @@
 #include "k0gram.tab.h"
 #include "ytab.h"
 #include "symtab.h"
+#include "type.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -78,8 +79,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
 
         if (func_name) {
-            typeptr return_typeptr = typeptr_name(return_type); 
-            insert_symbol(st, func_name, FUNCTION, return_typeptr);
+            insert_symbol(st, func_name, FUNCTION, typeptr_name(return_type));
             //printf("Created function scope for: %s\n", func_name);
 
             current_scope = create_function_scope(st, func_name);
@@ -124,7 +124,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                         if (param_name) {
                             printf("Inserting single function parameter: %s of type %s into %s\n",
                                 param_name, param_type, current_scope->scope_name);
-                            insert_symbol(current_scope, param_name, VARIABLE, param_type);
+                            insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                         }
                     }
                 }
@@ -155,7 +155,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                 if (param_name) {
                                     printf("Inserting multi function parameter: %s of type %s into %s\n",
                                         param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, param_type);
+                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                                 }
                             }
                         }
@@ -186,7 +186,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                 if (param_name) {
                                     printf("Inserting fallback function parameter: %s of type %s into %s\n",
                                         param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, param_type);
+                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                                 }
                             }
                         }
@@ -212,8 +212,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
 
              printf("Inserting variable: %s of type %s into %s\n",
                     var_name, var_type, current_scope->scope_name);
-            typeptr var_typeptr = typeptr_name(var_type);
-            insert_symbol(current_scope, var_name, VARIABLE, var_typeptr);
+            insert_symbol(current_scope, var_name, VARIABLE, typeptr_name(var_type));
         }
     }
 

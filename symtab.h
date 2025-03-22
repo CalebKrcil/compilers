@@ -4,7 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "type.h"
+
+struct tree;
+struct typeinfo;
+typedef struct typeinfo *typeptr;
 
 typedef enum { VARIABLE, FUNCTION, METHOD, CLASS_TYPE } SymbolKind;
 
@@ -34,6 +37,7 @@ void check_undeclared(SymbolTable st, char *s);
 void print_symbols(SymbolTable st);
 void free_symbol_table(SymbolTable st);
 int hash(SymbolTable st, char *s);
+typeptr typeptr_name(char *type_name);
 SymbolTable create_function_scope(SymbolTable parent, char *func_name);
 void set_package_scope_name(SymbolTable st, char *package_name);
 void add_predefined_symbols(SymbolTable st);
