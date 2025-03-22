@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include "symtab.h"
+
+typedef struct typeinfo *typeptr;
+typedef struct sym_table *SymbolTable;
 
 struct token {
     int category;
@@ -26,6 +28,7 @@ struct tree {
     int nkids;
     struct tree *kids[10];
     struct token *leaf;
+    typeptr type;
 };
 
 typedef struct func_symtab_list {

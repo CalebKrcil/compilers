@@ -78,7 +78,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
 
         if (func_name) {
-            insert_symbol(st, func_name, FUNCTION, return_type);
+            typeptr return_typeptr = typeptr_name(return_type); 
+            insert_symbol(st, func_name, FUNCTION, return_typeptr);
             //printf("Created function scope for: %s\n", func_name);
 
             current_scope = create_function_scope(st, func_name);
@@ -211,7 +212,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
 
              printf("Inserting variable: %s of type %s into %s\n",
                     var_name, var_type, current_scope->scope_name);
-            insert_symbol(current_scope, var_name, VARIABLE, var_type);
+            typeptr var_typeptr = typeptr_name(var_type);
+            insert_symbol(current_scope, var_name, VARIABLE, var_typeptr);
         }
     }
 
@@ -222,7 +224,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
                  printf("Implicitly declaring variable: %s in %s\n",
                         var_name, current_scope->scope_name);
-                insert_symbol(current_scope, var_name, VARIABLE, "unknown");  
+                insert_symbol(current_scope, var_name, VARIABLE, alctype(ANY_TYPE));  
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "symtab.h"
+#include "type.h"
 
 extern int error_count;
 
@@ -29,12 +30,31 @@ int hash(SymbolTable st, char *s) {
     return h;
 }
 
-void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
+typeptr typeptr_name(char *type_name){
+    if (!type_name) return null_typeptr;
+    if (strcmp(type_name, "Int") == 0)
+        return integer_typeptr;
+    else if (strcmp(type_name, "Double") == 0)
+        return double_typeptr;
+    else if (strcmp(type_name, "Boolean") == 0)
+        return boolean_typeptr;
+    else if (strcmp(type_name, "Char") == 0)
+        return char_typeptr;
+    else if (strcmp(type_name, "String") == 0)
+        return alctype(STRING_TYPE);
+    else if (strcmp(type_name, "Unit") == 0)
+        return null_typeptr;
+    else
+        return alctype(ANY_TYPE);
+    return null_typeptr;
+}
+
+void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type) {
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
         error_count++;  
         return;  
-    
+    }
     int index = hash(st, s);
     SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));
     if (!newEntry) {
@@ -44,7 +64,7 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, char *type) {
     
     newEntry->s = strdup(s);
     newEntry->kind = kind;
-    newEntry->type = type ? strdup(type) : strdup("unknown");
+    newEntry->type = type;
     newEntry->table = st;
     newEntry->next = st->tbl[index];
     st->tbl[index] = newEntry;
@@ -79,6 +99,7 @@ void check_undeclared(SymbolTable st, char *s) {
     if (!lookup_symbol(st, s)) {
         fprintf(stderr, "Error: Undeclared variable '%s'\n", s);
         error_count++; 
+    }
 }
 
 void print_symbols(SymbolTable st) {
@@ -121,7 +142,7 @@ void print_symbols(SymbolTable st) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
             symbols[idx] = entry->s;
-            types[idx] = entry->type;
+            types[idx] = typename(entry->type);
             idx++;
             entry = entry->next;
         }
@@ -151,6 +172,17 @@ void print_symbols(SymbolTable st) {
     free(types);
 }
 
+static int shared_type(typeptr t) {
+    if (t == integer_typeptr ||
+            t == double_typeptr ||
+            t == boolean_typeptr ||
+            t == char_typeptr ||
+            t == null_typeptr)
+            return 1;
+    return 0;
+
+}
+
 void free_symbol_table(SymbolTable st) {
     if (!st) return;
     
@@ -160,11 +192,13 @@ void free_symbol_table(SymbolTable st) {
             SymbolTableEntry temp = entry;
             entry = entry->next;
             free(temp->s);
-            free(temp->type);
+            if(!shared_type(temp->type))
+                free(temp->type);
             
             if (temp->param_count > 0 && temp->param_types) {
                 for (int j = 0; j < temp->param_count; j++) {
-                    free(temp->param_types[j]);
+                    if (!shared_type(temp->param_types[j]))
+                        free(temp->param_types[j]);
                 }
                 free(temp->param_types);
             }
@@ -198,63 +232,64 @@ void set_package_scope_name(SymbolTable st, char *package_name) {
 }
 
 void add_predefined_symbols(SymbolTable st) {
-    insert_symbol(st, "Int", CLASS_TYPE, "Type");
-    insert_symbol(st, "Double", CLASS_TYPE, "Type");
-    insert_symbol(st, "Boolean", CLASS_TYPE, "Type");
-    insert_symbol(st, "String", CLASS_TYPE, "Type");
-    insert_symbol(st, "Char", CLASS_TYPE, "Type");
-    insert_symbol(st, "Unit", CLASS_TYPE, "Type");
+    insert_symbol(st, "Int", CLASS_TYPE, integer_typeptr);
+    insert_symbol(st, "Double", CLASS_TYPE, double_typeptr);
+    insert_symbol(st, "Boolean", CLASS_TYPE, boolean_typeptr);
+    insert_symbol(st, "Char", CLASS_TYPE, char_typeptr);
+    insert_symbol(st, "String", CLASS_TYPE, alctype(STRING_TYPE));
+    insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr);
+    
     
     char *print_params[] = {"String"};
-    insert_method_symbol(st, "", "print", "Unit", 1, print_params);
+    insert_method_symbol(st, "", "print", typeptr_name("Unit"), 1, print_params);
     
     char *println_params[] = {"String"};
-    insert_method_symbol(st, "", "println", "Unit", 1, println_params);
+    insert_method_symbol(st, "", "println", typeptr_name("Unit"), 1, println_params);
     
-    insert_method_symbol(st, "", "readln", "String", 0, NULL);
+    insert_method_symbol(st, "", "readln", typeptr_name("String"), 0, NULL);
     
     char *get_params[] = {"Int"};
-    insert_method_symbol(st, "String", "get", "Char", 1, get_params);
+    insert_method_symbol(st, "String", "get", typeptr_name("Char"), 1, get_params);
     
     char *equals_params[] = {"String"};
-    insert_method_symbol(st, "String", "equals", "Boolean", 1, equals_params);
+    insert_method_symbol(st, "String", "equals", typeptr_name("Boolean"), 1, equals_params);
     
-    insert_method_symbol(st, "String", "length", "Int", 0, NULL);
+    insert_method_symbol(st, "String", "length", typeptr_name("Int"), 0, NULL);
     
     char *toString_params[] = {"Int"};  
-    insert_method_symbol(st, "String", "toString", "String", 1, toString_params);
+    insert_method_symbol(st, "String", "toString", typeptr_name("String"), 1, toString_params);
     
     char *valueOf_params[] = {"Any"};
-    insert_method_symbol(st, "String", "valueOf", "String", 1, valueOf_params);
+    insert_method_symbol(st, "String", "valueOf", typeptr_name("String"), 1, valueOf_params);
     
     char *substring_params[] = {"Int", "Int"};
-    insert_method_symbol(st, "String", "substring", "String", 2, substring_params);
+    insert_method_symbol(st, "String", "substring", typeptr_name("String"), 2, substring_params);
     
-    insert_symbol(st, "java.util.Random", CLASS_TYPE, "Type");
-    insert_method_symbol(st, "java.util.Random", "nextInt", "Int", 0, NULL);
+    insert_symbol(st, "java.util.Random", CLASS_TYPE, typeptr_name("Type"));
+    insert_method_symbol(st, "java.util.Random", "nextInt", typeptr_name("Int"), 0, NULL);
     
-    insert_symbol(st, "java.lang.Math", CLASS_TYPE, "Type");
+    insert_symbol(st, "java.lang.Math", CLASS_TYPE, typeptr_name("Type"));
     
     char *abs_params[] = {"Double"};
-    insert_method_symbol(st, "java.lang.Math", "abs", "Double", 1, abs_params);
+    insert_method_symbol(st, "java.lang.Math", "abs", typeptr_name("Double"), 1, abs_params);
     
     char *max_params[] = {"Double", "Double"};
-    insert_method_symbol(st, "java.lang.Math", "max", "Double", 2, max_params);
+    insert_method_symbol(st, "java.lang.Math", "max", typeptr_name("Double"), 2, max_params);
     
     char *min_params[] = {"Double", "Double"};
-    insert_method_symbol(st, "java.lang.Math", "min", "Double", 2, min_params);
+    insert_method_symbol(st, "java.lang.Math", "min", typeptr_name("Double"), 2, min_params);
     
     char *pow_params[] = {"Double", "Double"};
-    insert_method_symbol(st, "java.lang.Math", "pow", "Double", 2, pow_params);
+    insert_method_symbol(st, "java.lang.Math", "pow", typeptr_name("Double"), 2, pow_params);
     
     char *trig_params[] = {"Double"};
-    insert_method_symbol(st, "java.lang.Math", "cos", "Double", 1, trig_params);
-    insert_method_symbol(st, "java.lang.Math", "sin", "Double", 1, trig_params);
-    insert_method_symbol(st, "java.lang.Math", "tan", "Double", 1, trig_params);
+    insert_method_symbol(st, "java.lang.Math", "cos", typeptr_name("Double"), 1, trig_params);
+    insert_method_symbol(st, "java.lang.Math", "sin", typeptr_name("Double"), 1, trig_params);
+    insert_method_symbol(st, "java.lang.Math", "tan", typeptr_name("Double"), 1, trig_params);
 }
 
 void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, 
-    char *return_type, int param_count, char **param_types) {
+    typeptr return_type, int param_count, char **param_types) {
     char full_name[256];
     sprintf(full_name, "%s.%s", class_name, method_name);
 
@@ -267,13 +302,18 @@ void insert_method_symbol(SymbolTable st, char *class_name, char *method_name,
 
     newEntry->s = strdup(full_name);
     newEntry->kind = METHOD;
-    newEntry->type = return_type ? strdup(return_type) : strdup("unknown");
+
+    typeptr func_type = alctype(FUNC_TYPE);
+    func_type->u.f.returntype = return_type;
+    func_type->u.f.nparams = param_count;
+
+    newEntry->type = func_type;
     newEntry->param_count = param_count;
 
     if (param_count > 0) {
-        newEntry->param_types = malloc(param_count * sizeof(char*));
+        newEntry->param_types = malloc(param_count * sizeof(typeptr));
         for (int i = 0; i < param_count; i++) {
-            newEntry->param_types[i] = strdup(param_types[i]);
+            newEntry->param_types[i] = typeptr_name(param_types[i]);
         }
     } else {
         newEntry->param_types = NULL;
