@@ -122,8 +122,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                         }
                         
                         if (param_name) {
-                            printf("Inserting single function parameter: %s of type %s into %s\n",
-                                param_name, param_type, current_scope->scope_name);
+                            // printf("Inserting single function parameter: %s of type %s into %s\n",
+                                // param_name, param_type, current_scope->scope_name);
                             insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                         }
                     }
@@ -153,8 +153,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                     }
                                 }
                                 if (param_name) {
-                                    printf("Inserting multi function parameter: %s of type %s into %s\n",
-                                        param_name, param_type, current_scope->scope_name);
+                                    // printf("Inserting multi function parameter: %s of type %s into %s\n",
+                                        // param_name, param_type, current_scope->scope_name);
                                     insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                                 }
                             }
@@ -184,8 +184,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                 }
                                 
                                 if (param_name) {
-                                    printf("Inserting fallback function parameter: %s of type %s into %s\n",
-                                        param_name, param_type, current_scope->scope_name);
+                                    // printf("Inserting fallback function parameter: %s of type %s into %s\n",
+                                        // param_name, param_type, current_scope->scope_name);
                                     insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
                                 }
                             }
@@ -210,8 +210,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                 }
             }
 
-             printf("Inserting variable: %s of type %s into %s\n",
-                    var_name, var_type, current_scope->scope_name);
+            // printf("Inserting variable: %s of type %s into %s\n",
+                    // var_name, var_type, current_scope->scope_name);
             insert_symbol(current_scope, var_name, VARIABLE, typeptr_name(var_type));
         }
     }
@@ -221,8 +221,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             char *var_name = t->kids[0]->leaf->text;
 
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
-                 printf("Implicitly declaring variable: %s in %s\n",
-                        var_name, current_scope->scope_name);
+                // printf("Implicitly declaring variable: %s in %s\n",
+                        // var_name, current_scope->scope_name);
                 insert_symbol(current_scope, var_name, VARIABLE, alctype(ANY_TYPE));  
             }
         }
