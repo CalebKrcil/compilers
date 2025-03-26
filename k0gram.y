@@ -293,6 +293,7 @@ multiplicative_expression:
 
 primary_expression:
     IntegerLiteral { $$ = alctree(IntegerLiteral, "IntegerLiteral", 1, $1); }
+    | RealLiteral { $$ = alctree(RealLiteral, "RealLiteral", 1, $1); }
     | BooleanLiteral { $$ = alctree(BooleanLiteral, "BooleanLiteral", 1, $1); }
     | NullLiteral { $$ = alctree(NullLiteral, "NullLiteral", 1, $1); }
     | CharacterLiteral { $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); }
