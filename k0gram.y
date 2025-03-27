@@ -258,12 +258,16 @@ whenBranch:
 variableDeclaration:
     VAL Identifier nl_opt { $$ = alctree(VAL, "variableDeclaration", 1, $2); }
     | VAR Identifier nl_opt { $$ = alctree(VAR, "variableDeclaration", 1, $2); }
+    | CONST VAL Identifier nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 1, $3); }
     | VAL Identifier COLON type nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
     | VAR Identifier COLON type nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
+    | CONST VAL Identifier COLON type nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
     | VAL Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
     | VAR Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
+    | CONST VAL Identifier ASSIGNMENT expression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
     | VAL Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6); }
     | VAR Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6); }
+    | CONST VAL Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7); }
     ;
 
 multiVariableDeclaration:
