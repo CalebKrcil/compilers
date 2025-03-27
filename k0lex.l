@@ -15,6 +15,7 @@ void yyerror(const char *s);
 int comment_depth = 0;
 char string_buffer[16384];
 int string_pos = 0;
+int multiline_start_line = 0;
 %}
 
 %x IN_COMMENT  
@@ -41,7 +42,12 @@ SHEBANG   ^#![^\r\n]*
 "//".*     { /* Ignore line comments */ }
 "#".*      { /* Ignore hash-based comments */ }
 
-\"\"\"     { BEGIN(IN_MULTILINE_STRING); }
+\"\"\"     { 
+    BEGIN(IN_MULTILINE_STRING); 
+    string_pos = 0; 
+    multiline_start_line = yylineno; 
+    memset(string_buffer, 0, sizeof(string_buffer)); 
+}
 
 "/*"  { comment_depth = 1; BEGIN(IN_COMMENT); }
 
@@ -172,13 +178,53 @@ SHEBANG   ^#![^\r\n]*
         yytext = string_buffer;
         yyleng = string_pos;
         update_last_token(yytext);
+        
+        // Restore line number to the start of the multiline string
+        yylineno = multiline_start_line;
+        
         return alctoken(CharacterLiteral, yytext); 
     }
-    \n        { 
+
+    \\\"\"\"  { 
+        // Escaped triple quote within multiline string
+        string_buffer[string_pos++] = '"';
+        string_buffer[string_pos++] = '"';
+        string_buffer[string_pos++] = '"';
+    }
+
+    \\\n    { 
+        // Line continuation - ignore newline and continue 
+        // This allows multiline strings to span multiple lines without adding newline
+    }
+
+    \n      { 
+        // Preserve actual newlines in the string
         yylineno++; 
         string_buffer[string_pos++] = '\n';
     }
-    .         { 
+
+    \\n     { 
+        // Explicit newline escape sequence
+        string_buffer[string_pos++] = '\n';
+    }
+
+    \\r     { 
+        // Carriage return escape sequence
+        string_buffer[string_pos++] = '\r';
+    }
+
+    \\t     { 
+        // Tab escape sequence
+        string_buffer[string_pos++] = '\t';
+    }
+
+    \\.     { 
+        // Other escape sequences 
+        string_buffer[string_pos++] = yytext[1];
+    }
+
+    .       { 
+        // Any other character in multiline string
         string_buffer[string_pos++] = yytext[0];
     }
 }

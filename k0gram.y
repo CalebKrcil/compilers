@@ -39,7 +39,7 @@
 %type <treeptr> returnType_section expression additive_expression multiplicative_expression
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
 %type <treeptr> unaryExpression boolExpression returnStatement typeAlias whenStatement whenBranchList whenBranch
-%type <treeptr> expressionList
+%type <treeptr> expressionList breakStatement continueStatement
 
 %start program
 
@@ -147,6 +147,17 @@ statement:
     | ifStatement nl_opt { $$ = $1; }
     | whenStatement nl_opt {$$ = $1; }
     | returnStatement nl_opt { $$ = $1; }
+    | breakStatement nl_opt { $$ = $1; }
+    | continueStatement nl_opt { $$ = $1; }
+    ;
+
+
+breakStatement:
+    BREAK { $$ = alctree(BREAK, "breakStatement", 0); }
+    ;
+
+continueStatement:
+    CONTINUE { $$ = alctree(CONTINUE, "continueStatement", 0); }
     ;
 
 // Loop Statements

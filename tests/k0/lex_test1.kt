@@ -46,42 +46,11 @@ fun main() {
     } else {
         println("False")
     }
-    val truth = true
-    val lie = false
-    println("True: $truth, False: $lie")
 
     for (i in 1..3) {
         println(i)
     }
-    fun greet() = "Hello"
-    println(greet())
 
-    val nullable: String? = null
-    println(nullable ?: "Null Value")
-
-    println("Returned Value")
-
-    val immutable = "Fixed"
-    var mutable = "Changeable"
-    mutable = "Changed"
-    println("$immutable, $mutable")
-
-    val value = 1
-    when (value) {
-        1 -> println("One")
-        2 -> println("Two")
-        else -> println("Other")
-    }
-
-    i = 0
-    while (i < 3) {
-        println(i)
-        i++
-    }
-
-    const val CONSTANT_VALUE = 100
+    const val CONSTANT_VALUE: Int = 100
     println("Constant: $CONSTANT_VALUE")
-
-    val range = 1..5
-    println(3 in range)
 }
