@@ -39,7 +39,8 @@
 %type <treeptr> returnType_section expression additive_expression multiplicative_expression
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
 %type <treeptr> unaryExpression boolExpression returnStatement typeAlias whenStatement whenBranchList whenBranch
-%type <treeptr> expressionList breakStatement continueStatement
+%type <treeptr> expressionList breakStatement continueStatement disjunction conjunction
+%type <treeptr> equality comparison logical_unary_expression
 
 %start program
 
@@ -100,7 +101,9 @@ propertyDeclaration:
 // Type definition
 type:
     Identifier { $$ = alctree(0, "type", 1, $1); }
-    | Identifier LANGLE type RANGLE { $$ = alctree(0, "type", 2, $1, $3); }
+    | Identifier QUEST_NO_WS { $$ = alctree(0, "nullableType", 1, $1); }
+    | Identifier LANGLE type RANGLE { $$ = alctree(0, "genericType", 2, $1, $3); }
+    | Identifier LANGLE type RANGLE QUEST_NO_WS { $$ = alctree(0, "nullableGenericType", 2, $1, $3); }
     ;
 
 // Function declaration
@@ -226,16 +229,37 @@ ifStatement:
 
 boolExpression:
     expression { $$ = $1; }
-    | boolExpression EQEQ boolExpression { $$ = alctree(EQEQ, "booleanExpression", 2, $1, $3); }
-    | boolExpression EXCL_EQ boolExpression { $$ = alctree(EXCL_EQ, "booleanExpression", 2, $1, $3); }
-    | boolExpression LANGLE boolExpression { $$ = alctree(LANGLE, "booleanExpression", 2, $1, $3); }
-    | boolExpression RANGLE boolExpression { $$ = alctree(RANGLE, "booleanExpression", 2, $1, $3); }
-    | boolExpression LE boolExpression { $$ = alctree(LE, "booleanExpression", 2, $1, $3); }
-    | boolExpression GE boolExpression { $$ = alctree(GE, "booleanExpression", 2, $1, $3); }
-    | boolExpression CONJ boolExpression { $$ = alctree(CONJ, "booleanExpression", 2, $1, $3); }
-    | boolExpression DISJ boolExpression { $$ = alctree(DISJ, "booleanExpression", 2, $1, $3); }
-    | EXCL_NO_WS boolExpression { $$ = alctree(EXCL_NO_WS, "booleanExpression", 1, $2); }
-    | LPAREN boolExpression RPAREN { $$ = $3; }
+    | LPAREN boolExpression RPAREN { $$ = $2; }
+    ;
+
+disjunction:
+    conjunction { $$ = $1; }
+    | disjunction DISJ conjunction { $$ = alctree(DISJ, "disjunction", 2, $1, $3); }
+    ;
+
+conjunction:
+    equality { $$ = $1; }
+    | conjunction CONJ equality { $$ = alctree(CONJ, "conjunction", 2, $1, $3); }
+    ;
+
+equality:
+    comparison { $$ = $1; }
+    | equality EQEQ comparison { $$ = alctree(EQEQ, "equality", 2, $1, $3); }
+    | equality EQEQEQ comparison { $$ = alctree(EQEQEQ, "equality", 2, $1, $3); }
+    | equality EXCL_EQ comparison { $$ = alctree(EXCL_EQ, "equality", 2, $1, $3); }
+    ;
+
+comparison:
+    additive_expression { $$ = $1; }
+    | comparison LANGLE additive_expression { $$ = alctree(LANGLE, "comparison", 2, $1, $3); }
+    | comparison RANGLE additive_expression { $$ = alctree(RANGLE, "comparison", 2, $1, $3); }
+    | comparison LE additive_expression { $$ = alctree(LE, "comparison", 2, $1, $3); }
+    | comparison GE additive_expression { $$ = alctree(GE, "comparison", 2, $1, $3); }
+    ;
+
+logical_unary_expression:
+    primary_expression { $$ = $1; }
+    | EXCL_NO_WS logical_unary_expression { $$ = alctree(EXCL_NO_WS, "negation", 1, $2); }
     ;
 
 whenStatement:
@@ -262,12 +286,12 @@ variableDeclaration:
     | VAL Identifier COLON type nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
     | VAR Identifier COLON type nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
     | CONST VAL Identifier COLON type nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
-    | VAL Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
-    | VAR Identifier ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
-    | CONST VAL Identifier ASSIGNMENT expression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
-    | VAL Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6); }
-    | VAR Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6); }
-    | CONST VAL Identifier COLON type ASSIGNMENT expression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7); }
+    | VAL Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
+    | VAR Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
+    | CONST VAL Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
+    | VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6); }
+    | VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6); }
+    | CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7); }
     ;
 
 multiVariableDeclaration:
@@ -285,7 +309,7 @@ returnType_section:
 
 // Expressions
 expression:
-    additive_expression nl_opt { $$ = $1; }
+    disjunction { $$ = $1; }
     ;
 
 additive_expression:
@@ -300,10 +324,10 @@ expressionList:
     ;
 
 multiplicative_expression:
-    primary_expression { $$ = $1; }
-    | multiplicative_expression MULT primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
-    | multiplicative_expression DIV primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
-    | multiplicative_expression MOD primary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    logical_unary_expression { $$ = $1; }
+    | multiplicative_expression MULT logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    | multiplicative_expression DIV logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    | multiplicative_expression MOD logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
     ;
 
 primary_expression:

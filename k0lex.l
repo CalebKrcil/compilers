@@ -109,7 +109,7 @@ SHEBANG   ^#![^\r\n]*
 "!"{WS}+      { update_last_token("! "); return alctoken(EXCL_WS, yytext); }
 "!"           { update_last_token("!"); return alctoken(EXCL_NO_WS, yytext); }
 "."           { update_last_token("."); return alctoken(DOT, yytext); }
-"?"           { update_last_token("?"); return alctoken(QUEST_WS, yytext); }
+"?"           { update_last_token("?"); return alctoken(QUEST_NO_WS, yytext); }
 ".."          { update_last_token(".."); return alctoken(RANGE, yytext); }
 "..<"         { update_last_token("..<"); return alctoken(RANGE_UNTIL, yytext); }
 
@@ -125,7 +125,6 @@ SHEBANG   ^#![^\r\n]*
 "@ "          { update_last_token("@ "); return alctoken(AT_POST_WS, yytext); }
 " @"          { update_last_token(" @"); return alctoken(AT_PRE_WS, yytext); }
 " @ "         { update_last_token(" @ "); return alctoken(AT_BOTH_WS, yytext); }
-"??"          { update_last_token("??"); return alctoken(QUEST_NO_WS, yytext); }
 "'"           { update_last_token("'"); return alctoken(SINGLE_QUOTE, yytext); }
 "&"           { update_last_token("&"); return alctoken(AMP, yytext); }
 
