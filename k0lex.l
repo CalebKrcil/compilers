@@ -56,25 +56,64 @@ SHEBANG   ^#![^\r\n]*
     return 0;
 }
 
-"as" | "as?" | "class" | "!in" | "is" | "!is" | "object" | "package" |
-"super" | "this" | "throw" | "try" | "typealias" | "typeof" |
-"by" | "catch" | "constructor" | "delegate" | "dynamic" | "field" |
-"file" | "finally" | "get" | "init" | "param" | "property" | "receiver" |
-"set" | "setparam" | "value" | "where" | "abstract" | "actual" |
-"annotation" | "companion" | "crossinline" | "data" | "enum" | "expect" |
-"external" | "final" | "infix" | "inline" | "inner" | "internal" |
-"lateinit" | "noinline" | "open" | "operator" | "out" | "private" |
-"protected" | "public" | "reified" | "sealed" | "suspend" | "tailrec" |
-"vararg" {
-    fprintf(stderr, "Error: Unsupported keyword in k0 '%s' at line %d\n", yytext, yylineno);
-    exit(1);
-}
+"as" { fprintf(stderr, "Error: Unsupported keyword 'as' at line %d\n", yylineno); exit(1); }
+"as?" { fprintf(stderr, "Error: Unsupported keyword 'as?' at line %d\n", yylineno); exit(1); }
+"class" { fprintf(stderr, "Error: Unsupported keyword 'class' at line %d\n", yylineno); exit(1); }
+"!in" { fprintf(stderr, "Error: Unsupported keyword '!in' at line %d\n", yylineno); exit(1); }
+"is" { fprintf(stderr, "Error: Unsupported keyword 'is' at line %d\n", yylineno); exit(1); }
+"!is" { fprintf(stderr, "Error: Unsupported keyword '!is' at line %d\n", yylineno); exit(1); }
+"object" { fprintf(stderr, "Error: Unsupported keyword 'object' at line %d\n", yylineno); exit(1); }
+"package" { fprintf(stderr, "Error: Unsupported keyword 'package' at line %d\n", yylineno); exit(1); }
+"super" { fprintf(stderr, "Error: Unsupported keyword 'super' at line %d\n", yylineno); exit(1); }
+"this" { fprintf(stderr, "Error: Unsupported keyword 'this' at line %d\n", yylineno); exit(1); }
+"throw" { fprintf(stderr, "Error: Unsupported keyword 'throw' at line %d\n", yylineno); exit(1); }
+"try" { fprintf(stderr, "Error: Unsupported keyword 'try' at line %d\n", yylineno); exit(1); }
+"typealias" { fprintf(stderr, "Error: Unsupported keyword 'typealias' at line %d\n", yylineno); exit(1); }
+"typeof" { fprintf(stderr, "Error: Unsupported keyword 'typeof' at line %d\n", yylineno); exit(1); }
+"by" { fprintf(stderr, "Error: Unsupported keyword 'by' at line %d\n", yylineno); exit(1); }
+"catch" { fprintf(stderr, "Error: Unsupported keyword 'catch' at line %d\n", yylineno); exit(1); }
+"constructor" { fprintf(stderr, "Error: Unsupported keyword 'constructor' at line %d\n", yylineno); exit(1); }
+"delegate" { fprintf(stderr, "Error: Unsupported keyword 'delegate' at line %d\n", yylineno); exit(1); }
+"dynamic" { fprintf(stderr, "Error: Unsupported keyword 'dynamic' at line %d\n", yylineno); exit(1); }
+"field" { fprintf(stderr, "Error: Unsupported keyword 'field' at line %d\n", yylineno); exit(1); }
+"file" { fprintf(stderr, "Error: Unsupported keyword 'file' at line %d\n", yylineno); exit(1); }
+"finally" { fprintf(stderr, "Error: Unsupported keyword 'finally' at line %d\n", yylineno); exit(1); }
+"get" { fprintf(stderr, "Error: Unsupported keyword 'get' at line %d\n", yylineno); exit(1); }
+"init" { fprintf(stderr, "Error: Unsupported keyword 'init' at line %d\n", yylineno); exit(1); }
+"param" { fprintf(stderr, "Error: Unsupported keyword 'param' at line %d\n", yylineno); exit(1); }
+"property" { fprintf(stderr, "Error: Unsupported keyword 'property' at line %d\n", yylineno); exit(1); }
+"receiver" { fprintf(stderr, "Error: Unsupported keyword 'receiver' at line %d\n", yylineno); exit(1); }
+"set" { fprintf(stderr, "Error: Unsupported keyword 'set' at line %d\n", yylineno); exit(1); }
+"setparam" { fprintf(stderr, "Error: Unsupported keyword 'setparam' at line %d\n", yylineno); exit(1); }
+"value" { fprintf(stderr, "Error: Unsupported keyword 'value' at line %d\n", yylineno); exit(1); }
+"where" { fprintf(stderr, "Error: Unsupported keyword 'where' at line %d\n", yylineno); exit(1); }
+"when" { fprintf(stderr, "Error: Unsupported keyword 'when' at line %d\n", yylineno); exit(1); }
 
-"~|&=|\\|=|\\||\\^=|\\^|>>=|>>l|>>|<<=|<<|&" {
-    update_last_token("BITWISE");
-    fprintf(stderr, "Error: Bitwise and shift operators not in k0 '%s' at line %d\n", yytext, yylineno);
-    exit(1);
-}
+"..." { fprintf(stderr, "Error: Unsupported operator '...' at line %d\n", yylineno); exit(1); }
+"*=" { fprintf(stderr, "Error: Unsupported operator '*=' at line %d\n", yylineno); exit(1); }
+"/=" { fprintf(stderr, "Error: Unsupported operator '/=' at line %d\n", yylineno); exit(1); }
+"%=" { fprintf(stderr, "Error: Unsupported operator '%%=' at line %d\n", yylineno); exit(1); }
+"->" { fprintf(stderr, "Error: Unsupported operator '->' at line %d\n", yylineno); exit(1); }
+"=>" { fprintf(stderr, "Error: Unsupported operator '=>' at line %d\n", yylineno); exit(1); }
+"::" { fprintf(stderr, "Error: Unsupported operator '::' at line %d\n", yylineno); exit(1); }
+";;" { fprintf(stderr, "Error: Unsupported operator ';;' at line %d\n", yylineno); exit(1); }
+"@" { fprintf(stderr, "Error: Unsupported operator '@' at line %d\n", yylineno); exit(1); }
+"'" { fprintf(stderr, "Error: Unsupported operator ''' at line %d\n", yylineno); exit(1); }
+
+"`" { fprintf(stderr, "Error: Unsupported punctuation '`' at line %d\n", yylineno); exit(1); }
+
+"~" { fprintf(stderr, "Error: Bitwise operator '~' at line %d\n", yylineno); exit(1); }
+"&=" { fprintf(stderr, "Error: Bitwise operator '&=' at line %d\n", yylineno); exit(1); }
+"|=" { fprintf(stderr, "Error: Bitwise operator '|=' at line %d\n", yylineno); exit(1); }
+"|" { fprintf(stderr, "Error: Bitwise operator '|' at line %d\n", yylineno); exit(1); }
+"^=" { fprintf(stderr, "Error: Bitwise operator '^=' at line %d\n", yylineno); exit(1); }
+"^" { fprintf(stderr, "Error: Bitwise operator '^' at line %d\n", yylineno); exit(1); }
+">>=" { fprintf(stderr, "Error: Bitwise operator '>>=' at line %d\n", yylineno); exit(1); }
+">>" { fprintf(stderr, "Error: Bitwise operator '>>' at line %d\n", yylineno); exit(1); }
+"<<=" { fprintf(stderr, "Error: Bitwise operator '<<=' at line %d\n", yylineno); exit(1); }
+"<<" { fprintf(stderr, "Error: Bitwise operator '<<' at line %d\n", yylineno); exit(1); }
+"&" { fprintf(stderr, "Error: Bitwise operator '&' at line %d\n", yylineno); exit(1); }
+
 
 
 ","           { update_last_token(","); return alctoken(COMMA, yytext); }
@@ -113,21 +152,6 @@ SHEBANG   ^#![^\r\n]*
 ".."          { update_last_token(".."); return alctoken(RANGE, yytext); }
 "..<"         { update_last_token("..<"); return alctoken(RANGE_UNTIL, yytext); }
 
-"..."         { update_last_token("..."); return alctoken(RESERVED, yytext); }
-"*="          { update_last_token("*="); return alctoken(MULT_ASSIGNMENT, yytext); }
-"/="          { update_last_token("/="); return alctoken(DIV_ASSIGNMENT, yytext); }
-"%="          { update_last_token("%="); return alctoken(MOD_ASSIGNMENT, yytext); }
-"->"          { update_last_token("->"); return alctoken(ARROW, yytext); }
-"=>"          { update_last_token("=>"); return alctoken(DOUBLE_ARROW, yytext); }
-"::"          { update_last_token("::"); return alctoken(COLONCOLON, yytext); }
-";;"          { update_last_token(";;"); return alctoken(DOUBLE_SEMICOLON, yytext); }
-"@"           { update_last_token("@"); return alctoken(AT_NO_WS, yytext); }
-"@ "          { update_last_token("@ "); return alctoken(AT_POST_WS, yytext); }
-" @"          { update_last_token(" @"); return alctoken(AT_PRE_WS, yytext); }
-" @ "         { update_last_token(" @ "); return alctoken(AT_BOTH_WS, yytext); }
-"'"           { update_last_token("'"); return alctoken(SINGLE_QUOTE, yytext); }
-"&"           { update_last_token("&"); return alctoken(AMP, yytext); }
-
 "break"         { update_last_token("break"); return alctoken(BREAK, yytext); }
 "continue"      { update_last_token("continue"); return alctoken(CONTINUE, yytext); }
 "do"            { update_last_token("do"); return alctoken(DO, yytext); }
@@ -141,7 +165,6 @@ SHEBANG   ^#![^\r\n]*
 "true"          { update_last_token("true"); return alctoken(BooleanLiteral, yytext); }
 "val"           { update_last_token("val"); return alctoken(VAL, yytext); }
 "var"           { update_last_token("var"); return alctoken(VAR, yytext); }
-"when"          { update_last_token("when"); return alctoken(WHEN, yytext); }
 "while"         { update_last_token("while"); return alctoken(WHILE, yytext); }
 "import"        { update_last_token("import"); return alctoken(IMPORT, yytext); }
 "const"         { update_last_token("const"); return alctoken(CONST, yytext); }

@@ -38,7 +38,7 @@
 %type <treeptr> variableDeclaration multiVariableDeclaration variableDeclarationList
 %type <treeptr> returnType_section expression additive_expression multiplicative_expression
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
-%type <treeptr> unaryExpression boolExpression returnStatement typeAlias whenStatement whenBranchList whenBranch
+%type <treeptr> unaryExpression boolExpression returnStatement typeAlias
 %type <treeptr> expressionList breakStatement continueStatement disjunction conjunction
 %type <treeptr> equality comparison logical_unary_expression
 
@@ -148,7 +148,6 @@ statement:
     | assignment nl_opt { $$ = $1; }
     | loopStatement nl_opt { $$ = $1; }
     | ifStatement nl_opt { $$ = $1; }
-    | whenStatement nl_opt {$$ = $1; }
     | returnStatement nl_opt { $$ = $1; }
     | breakStatement nl_opt { $$ = $1; }
     | continueStatement nl_opt { $$ = $1; }
@@ -175,6 +174,8 @@ forStatement:
         { $$ = alctree(FOR, "forStatement", 4, $4, $6, $8, $10); }
     | FOR LPAREN Identifier IN expression RANGE expression RPAREN controlStructureBody nl_opt
         { $$ = alctree(FOR, "forStatementKotlinRange", 4, $3, $5, $7, $9); }
+    | FOR LPAREN Identifier IN expression RANGE_UNTIL expression RPAREN controlStructureBody nl_opt
+        { $$ = alctree(FOR, "forStatementKotlinRangeUntil", 4, $3, $5, $7, $9); }
     ;
 
 
@@ -260,22 +261,7 @@ comparison:
 logical_unary_expression:
     primary_expression { $$ = $1; }
     | EXCL_NO_WS logical_unary_expression { $$ = alctree(EXCL_NO_WS, "negation", 1, $2); }
-    ;
-
-whenStatement:
-    WHEN LPAREN expression RPAREN LCURL nl_opt whenBranchList nl_opt RCURL {
-        $$ = alctree(WHEN, "whenStatement", 2, $3, $7);
-    }
-    ;
-
-whenBranchList:
-    whenBranch {$$ = $1; }
-    | whenBranchList nl_opt whenBranch { $$ = alctree(0, "whenBranches", 2, $1, $3); }
-    ;
-
-whenBranch:
-    expression ARROW controlStructureBody { $$ = alctree(0, "whenBranch", 2, $1, $3); }
-    | ELSE ARROW controlStructureBody { $$ = alctree(ELSE, "whenBranchElse", 1, $3); }
+    | EXCL_WS logical_unary_expression { $$ = alctree(EXCL_WS, "negation", 1, $2); }
     ;
 
 // Variable declarations

@@ -37,16 +37,6 @@ fun main() {
         println("For Loop Kotlin: $i")
     }
 
-
-    // When Statement (Switch Equivalent)
-    val grade = 'B'
-    when (grade) {
-        'A' -> println("Excellent!")
-        'B' -> println("Good job!")
-        'C' -> println("Needs improvement")
-        else -> println("Invalid grade")
-    }
-
     // Function Calls
     val squared = square(4)
     println("Squared: $squared")

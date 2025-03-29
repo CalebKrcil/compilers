@@ -50,6 +50,10 @@ fun main() {
         println(i)
     }
 
+    for (i in 1..<5) {
+        println(i)
+    }
+
     const val CONSTANT_VALUE: Int = 100
     println("Constant: $CONSTANT_VALUE")
 
@@ -85,6 +89,7 @@ fun main() {
     val conjunction: Boolean = trueValue && falseValue
     val disjunction: Boolean = trueValue || falseValue
     val negation: Boolean = !trueValue
+    val negation2: Boolean = ! trueValue
 
     // Control flow
     if (constantValue > 0) {
@@ -98,4 +103,19 @@ fun main() {
 
     // Import and const (demonstrating these keywords)
     println("Lexer symbol demonstration complete!")
+
+    var num1: Int = 1
+    var num2: Int = 2
+    var num3: Int = 3
+    var functioncalled: Int = extra(num1, num2, num3)
+
+    val text: String = "Hello"
+    val length: Int = text.length
+}
+
+fun extra(num1: Int, num2: Int, num3: Int) {
+    num1 += 4
+    num2 -= 1
+    var result: Int = num1 + num2 + num3
+    return result
 }
