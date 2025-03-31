@@ -1,21 +1,19 @@
 import os
 import subprocess
+import sys
 
 # Paths
 TEST_DIR = "tests"
 CATEGORIES = ["errors", "k0", "kotlin"]  # Test categories
 COMPILER_EXECUTABLE = "./k0"  # Compiler command
+OUTPUT_FILE = "test_results.txt"  # Output file for results
 
 def run_test(file_path, expected_error):
     """Run the compiler on a test file and check if it produces the expected result."""
     try:
-        # Execute the compiler and capture stdout + stderr
         result = subprocess.run([COMPILER_EXECUTABLE, file_path], capture_output=True, text=True)
-
-        # Compiler outputs errors to stderr
         has_error = bool(result.stderr.strip())
 
-        # Check if the output matches expectation
         if has_error == expected_error:
             print(f"PASS: {file_path}")
             return True
@@ -56,4 +54,9 @@ def run_tests():
     print(f"Failed: {total_tests - passed_tests}")
 
 if __name__ == "__main__":
-    run_tests()
+    with open(OUTPUT_FILE, "w") as f:
+        sys.stdout = f  # Redirect stdout to file
+        run_tests()
+        sys.stdout = sys.__stdout__  # Restore stdout
+
+    print(f"Test results saved to {OUTPUT_FILE}")
