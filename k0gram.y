@@ -2,6 +2,9 @@
     #include <stdio.h>
     #include <stdlib.h>
     #include "tree.h"
+    #include "type.h"
+    #include "symtab.h"
+    #include "semantics.h"
     int yylex(void);
     void yyerror(const char *s);
     struct tree *root;
@@ -60,86 +63,120 @@
    struct tree *treeptr;
 }
 
-
-
 %%
 
 nl_opt:
-    /* epsilon */
+      /* epsilon */
     | NL nl_opt
     | SEMICOLON nl_opt
     ;
 
-// Program structure
 program:
-    nl_opt topLevelObjectList nl_opt{
-        root = $2;
-    }
+    nl_opt topLevelObjectList nl_opt { root = $2; }
     ;
 
 topLevelObjectList:
     topLevelObject { $$ = $1; }
-    | topLevelObjectList nl_opt topLevelObject { $$ = alctree(0, "topLevelObjectList", 2, $1, $3); }
+    | topLevelObjectList nl_opt topLevelObject { 
+          $$ = alctree(101, "topLevelObjectList", 2, $1, $3); 
+          $$->type = NULL; 
+      }
     ;
 
 topLevelObject:
     declaration { $$ = $1; }
     ;
 
-// Declarations
 declaration:
     functionDeclaration { $$ = $1; }
     | propertyDeclaration { $$ = $1; }
     | typeAlias { $$ = $1; }
     ;
 
-// Property declaration
 propertyDeclaration:
-    PROPERTY Identifier COLON type nl_opt { $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); $$->is_nullable = $4->is_nullable;}
+    PROPERTY Identifier COLON type nl_opt { 
+         $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); 
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
+    }
     ;
 
-// Type definition
 type:
-    Identifier { $$ = alctree(0, "type", 1, $1); $$->is_nullable = 0;}
-    | Identifier QUEST_NO_WS { $$ = alctree(0, "nullableType", 1, $1); $$->is_nullable = 1;}
-    | Identifier LANGLE type RANGLE { $$ = alctree(0, "genericType", 2, $1, $3); $$->is_nullable = 0;}
-    | Identifier LANGLE type RANGLE QUEST_NO_WS { $$ = alctree(0, "nullableGenericType", 2, $1, $3); $$->is_nullable = 1;}
+    Identifier { 
+         $$ = alctree(102, "type", 1, $1); 
+         $$->is_nullable = 0; 
+         $$->type = typeptr_name($1->leaf->text);
+    }
+    | Identifier QUEST_NO_WS { 
+         $$ = alctree(103, "nullableType", 1, $1); 
+         $$->is_nullable = 1;
+         $$->type = typeptr_name($1->leaf->text);
+    }
+    | Identifier LANGLE type RANGLE { 
+         $$ = alctree(104, "genericType", 2, $1, $3); 
+         $$->is_nullable = 0;
+         $$->type = typeptr_name($1->leaf->text);
+    }
+    | Identifier LANGLE type RANGLE QUEST_NO_WS { 
+         $$ = alctree(105, "nullableGenericType", 2, $1, $3); 
+         $$->is_nullable = 1;
+         $$->type = typeptr_name($1->leaf->text);
+    }
     ;
 
-// Function declaration
 functionDeclaration:
-    FUN Identifier functionValueParameters returnType_section functionBody { $$ = alctree(FUN, "functionDeclaration", 4, $2, $3, $4, $5); }
-    | FUN Identifier functionValueParameters functionBody { $$ = alctree(FUN, "functionDeclaration", 3, $2, $3, $4); }
+    FUN Identifier functionValueParameters returnType_section functionBody { 
+         $$ = alctree(FUN, "functionDeclaration", 4, $2, $3, $4, $5); 
+         $$->type = $4->type;
+    }
+    | FUN Identifier functionValueParameters functionBody { 
+         $$ = alctree(FUN, "functionDeclaration", 3, $2, $3, $4); 
+         $$->type = typeptr_name("Unit");
+    }
     ;
 
 functionValueParameters:
-    LPAREN functionParameterList_opt RPAREN { $$ = alctree(0, "functionValueParameters", 1, $2); }
+    LPAREN functionParameterList_opt RPAREN { 
+         $$ = alctree(108, "functionValueParameters", 1, $2); 
+         $$->type = NULL;
+    }
     ;
 
 functionParameterList_opt:
     /* epsilon */ { $$ = NULL; }
     | functionValueParameter { $$ = $1; }
-    | functionParameterList_opt COMMA functionValueParameter { $$ = alctree(0, "functionParameterList", 2, $1, $3); }
+    | functionParameterList_opt COMMA functionValueParameter { 
+          $$ = alctree(109, "functionParameterList", 2, $1, $3); 
+          $$->type = NULL;
+    }
     ;
 
 functionValueParameter:
-    Identifier COLON type { $$ = alctree(0, "functionValueParameter", 2, $1, $3); $$->is_nullable = $3->is_nullable;}
+    Identifier COLON type { 
+         $$ = alctree(110, "functionValueParameter", 2, $1, $3); 
+         $$->is_nullable = $3->is_nullable;
+         $$->type = $3->type;
+    }
     ;
-
-// Function components
 
 functionBody:
     block { $$ = $1; }
     ;
 
 block:
-    LCURL nl_opt RCURL {$$ = NULL;}
-    | LCURL statements nl_opt RCURL { $$ = alctree(0, "block", 1, $2); }
+    LCURL nl_opt RCURL { $$ = NULL; }
+    | LCURL statements nl_opt RCURL { 
+         $$ = alctree(111, "block", 1, $2); 
+         $$->type = NULL;
+    }
     ;
 
 statements:
     nl_opt statement nl_opt { $$ = $2; }
-    | statements nl_opt statement { $$ = alctree(0, "statements", 2, $1, $3); }
+    | statements nl_opt statement { 
+          $$ = alctree(112, "statements", 2, $1, $3); 
+          $$->type = NULL;
+      }
     ;
 
 statement:
@@ -153,16 +190,14 @@ statement:
     | continueStatement nl_opt { $$ = $1; }
     ;
 
-
 breakStatement:
-    BREAK { $$ = alctree(BREAK, "breakStatement", 0); }
+    BREAK { $$ = alctree(BREAK, "breakStatement", 0); $$->type = NULL; }
     ;
 
 continueStatement:
-    CONTINUE { $$ = alctree(CONTINUE, "continueStatement", 0); }
+    CONTINUE { $$ = alctree(CONTINUE, "continueStatement", 0); $$->type = NULL; }
     ;
 
-// Loop Statements
 loopStatement:
     forStatement { $$ = $1; }
     | whileStatement { $$ = $1; }
@@ -171,23 +206,21 @@ loopStatement:
 
 forStatement:
     FOR LPAREN nl_opt forInit SEMICOLON boolExpression SEMICOLON forUpdate RPAREN controlStructureBody nl_opt
-        { $$ = alctree(FOR, "forStatement", 4, $4, $6, $8, $10); }
+        { $$ = alctree(FOR, "forStatement", 4, $4, $6, $8, $10); $$->type = NULL; }
     | FOR LPAREN Identifier IN expression RANGE expression RPAREN controlStructureBody nl_opt
-        { $$ = alctree(FOR, "forStatementKotlinRange", 4, $3, $5, $7, $9); }
+        { $$ = alctree(FOR, "forStatementKotlinRange", 4, $3, $5, $7, $9); $$->type = NULL; }
     | FOR LPAREN Identifier IN expression RANGE_UNTIL expression RPAREN controlStructureBody nl_opt
-        { $$ = alctree(FOR, "forStatementKotlinRangeUntil", 4, $3, $5, $7, $9); }
+        { $$ = alctree(FOR, "forStatementKotlinRangeUntil", 4, $3, $5, $7, $9); $$->type = NULL; }
     ;
 
-
 whileStatement:
-    WHILE nl_opt LPAREN boolExpression RPAREN nl_opt controlStructureBody { $$ = alctree(WHILE, "whileStatement", 2, $4, $7); }
+    WHILE nl_opt LPAREN boolExpression RPAREN nl_opt controlStructureBody { $$ = alctree(WHILE, "whileStatement", 2, $4, $7); $$->type = NULL; }
     ;
 
 doWhileStatement:
-    DO nl_opt controlStructureBody nl_opt WHILE nl_opt LPAREN boolExpression RPAREN { $$ = alctree(DO, "doWhileStatement", 2, $3, $8); }
+    DO nl_opt controlStructureBody nl_opt WHILE nl_opt LPAREN boolExpression RPAREN { $$ = alctree(DO, "doWhileStatement", 2, $3, $8); $$->type = NULL; }
     ;
 
-// Control structure components
 controlStructureBody:
     block nl_opt { $$ = $1; }
     | statement nl_opt { $$ = $1; }
@@ -200,32 +233,39 @@ forInit:
 
 forUpdate:
     assignment { $$ = $1; }
-    | /*epsilon */ {$$ = NULL; }
+    | /* epsilon */ { $$ = NULL; }
     ;
 
 unaryExpression:
-    INCR Identifier { $$ = alctree(INCR, "preIncrement", 1, $2); }  
-    | DECR Identifier { $$ = alctree(DECR, "preDecrement", 1, $2); }  
-    | Identifier INCR { $$ = alctree(INCR, "postIncrement", 1, $1); }  
-    | Identifier DECR { $$ = alctree(DECR, "postDecrement", 1, $1); }
+    INCR Identifier { $$ = alctree(INCR, "preIncrement", 1, $2); $$->type = integer_typeptr; }  
+    | DECR Identifier { $$ = alctree(DECR, "preDecrement", 1, $2); $$->type = integer_typeptr; }  
+    | Identifier INCR { $$ = alctree(INCR, "postIncrement", 1, $1); $$->type = integer_typeptr; }  
+    | Identifier DECR { $$ = alctree(DECR, "postDecrement", 1, $1); $$->type = integer_typeptr; }
     ;
 
-// Assignments
 assignment:
-    Identifier ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); }
-    | Identifier ADD_ASSIGNMENT expression { $$ = alctree(ADD_ASSIGNMENT, "addAssignment", 2, $1, $3); }
-    | Identifier SUB_ASSIGNMENT expression { $$ = alctree(SUB_ASSIGNMENT, "subAssignment", 2, $1, $3); }
-    | variableDeclaration { $$ = alctree(ASSIGNMENT, "assignment", 1, $1); }
-    | multiVariableDeclaration ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); }
+    Identifier ASSIGNMENT expression { 
+         $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
+    | Identifier ADD_ASSIGNMENT expression { 
+         $$ = alctree(ADD_ASSIGNMENT, "addAssignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
+    | Identifier SUB_ASSIGNMENT expression { 
+         $$ = alctree(SUB_ASSIGNMENT, "subAssignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
+    | variableDeclaration { $$ = alctree(ASSIGNMENT, "assignment", 1, $1); $$->type = $1->type; }
+    | multiVariableDeclaration ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); $$->type = $1->type; }
     | unaryExpression { $$ = $1; }
     ;
 
-// Control structures
 ifStatement:
     IF LPAREN boolExpression RPAREN nl_opt controlStructureBody nl_opt %prec LOWER_THAN_ELSE
-        { $$ = alctree(IF, "ifStatement", 2, $3, $6); }
+        { $$ = alctree(IF, "ifStatement", 2, $3, $6); $$->type = NULL; }
     | IF LPAREN boolExpression RPAREN nl_opt controlStructureBody nl_opt ELSE nl_opt controlStructureBody nl_opt 
-        { $$ = alctree(IF, "ifElseStatement", 3, $3, $6, $10); }    
+        { $$ = alctree(IF, "ifElseStatement", 3, $3, $6, $10); $$->type = NULL; }
     ;
 
 boolExpression:
@@ -235,92 +275,103 @@ boolExpression:
 
 disjunction:
     conjunction { $$ = $1; }
-    | disjunction DISJ conjunction { $$ = alctree(DISJ, "disjunction", 2, $1, $3); }
+    | disjunction DISJ conjunction { $$ = alctree(DISJ, "disjunction", 2, $1, $3); $$->type = boolean_typeptr; }
     ;
 
 conjunction:
     equality { $$ = $1; }
-    | conjunction CONJ equality { $$ = alctree(CONJ, "conjunction", 2, $1, $3); }
+    | conjunction CONJ equality { $$ = alctree(CONJ, "conjunction", 2, $1, $3); $$->type = boolean_typeptr; }
     ;
 
 equality:
     comparison { $$ = $1; }
-    | equality EQEQ comparison { $$ = alctree(EQEQ, "equality", 2, $1, $3); }
-    | equality EQEQEQ comparison { $$ = alctree(EQEQEQ, "equality", 2, $1, $3); }
-    | equality EXCL_EQ comparison { $$ = alctree(EXCL_EQ, "equality", 2, $1, $3); }
+    | equality EQEQ comparison { $$ = alctree(EQEQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
+    | equality EQEQEQ comparison { $$ = alctree(EQEQEQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
+    | equality EXCL_EQ comparison { $$ = alctree(EXCL_EQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
     ;
 
 comparison:
     additive_expression { $$ = $1; }
-    | comparison LANGLE additive_expression { $$ = alctree(LANGLE, "comparison", 2, $1, $3); }
-    | comparison RANGLE additive_expression { $$ = alctree(RANGLE, "comparison", 2, $1, $3); }
-    | comparison LE additive_expression { $$ = alctree(LE, "comparison", 2, $1, $3); }
-    | comparison GE additive_expression { $$ = alctree(GE, "comparison", 2, $1, $3); }
+    | comparison LANGLE additive_expression { $$ = alctree(LANGLE, "comparison", 2, $1, $3); $$->type = boolean_typeptr; }
+    | comparison RANGLE additive_expression { $$ = alctree(RANGLE, "comparison", 2, $1, $3); $$->type = boolean_typeptr; }
+    | comparison LE additive_expression { $$ = alctree(LE, "comparison", 2, $1, $3); $$->type = boolean_typeptr; }
+    | comparison GE additive_expression { $$ = alctree(GE, "comparison", 2, $1, $3); $$->type = boolean_typeptr; }
     ;
 
 logical_unary_expression:
     primary_expression { $$ = $1; }
-    | EXCL_NO_WS logical_unary_expression { $$ = alctree(EXCL_NO_WS, "negation", 1, $2); }
-    | EXCL_WS logical_unary_expression { $$ = alctree(EXCL_WS, "negation", 1, $2); }
+    | EXCL_NO_WS logical_unary_expression { $$ = alctree(EXCL_NO_WS, "negation", 1, $2); $$->type = boolean_typeptr; }
+    | EXCL_WS logical_unary_expression { $$ = alctree(EXCL_WS, "negation", 1, $2); $$->type = boolean_typeptr; }
     ;
 
-// Variable declarations
 variableDeclaration:
     VAL Identifier nl_opt {
-        $$ = alctree(VAL, "variableDeclaration", 1, $2);
-        $$->is_mutable = 0;
+         $$ = alctree(VAL, "variableDeclaration", 1, $2);
+         $$->is_mutable = 0;
+         $$->type = NULL;
     }
-    |VAR Identifier nl_opt {
-        $$ = alctree(VAR, "variableDeclaration", 1, $2);
-        $$->is_mutable = 1;
+    | VAR Identifier nl_opt {
+         $$ = alctree(VAR, "variableDeclaration", 1, $2);
+         $$->is_mutable = 1;
+         $$->type = NULL;
     }
-    |CONST VAL Identifier nl_opt {
-        $$ = alctree(CONST, "constVariableDeclaration", 1, $3);
-        $$->is_mutable = 0;
+    | CONST VAL Identifier nl_opt {
+         $$ = alctree(CONST, "constVariableDeclaration", 1, $3);
+         $$->is_mutable = 0;
+         $$->type = NULL;
     }
-    |VAL Identifier COLON type nl_opt {
-        $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
-        $$->is_mutable = 0;
-        $$->is_nullable = $4->is_nullable;
+    | VAL Identifier COLON type nl_opt {
+         $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
+         $$->is_mutable = 0;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
     }
-    |VAR Identifier COLON type nl_opt {
-        $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
-        $$->is_mutable = 1;
-        $$->is_nullable = $4->is_nullable;
+    | VAR Identifier COLON type nl_opt {
+         $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
+         $$->is_mutable = 1;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
     }
-    |CONST VAL Identifier COLON type nl_opt {
-        $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
-        $$->is_mutable = 0;
-        $$->is_nullable = $5->is_nullable;
+    | CONST VAL Identifier COLON type nl_opt {
+         $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
+         $$->is_mutable = 0;
+         $$->is_nullable = $5->is_nullable;
+         $$->type = $5->type;
     }
-    |VAL Identifier ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
+    | VAL Identifier ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
+         $$->is_mutable = 0;
+         $$->type = $4->type;
     }
-    |VAR Identifier ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
-        $$->is_mutable = 1;
+    | VAR Identifier ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
+         $$->is_mutable = 1;
+         $$->type = $4->type;
     }
-    |CONST VAL Identifier ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
-        $$->is_mutable = 0;
+    | CONST VAL Identifier ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
+         $$->is_mutable = 0;
+         $$->type = $5->type;
     }
-    |VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6);
-        $$->is_mutable = 0;
-        $$->is_nullable = $4->is_nullable;
+    | VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6);
+         $$->is_mutable = 0;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
     }
-    |VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6);
-        $$->is_mutable = 1;
-        $$->is_nullable = $4->is_nullable;
+    | VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6);
+         $$->is_mutable = 1;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
     }
-    |CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
-        $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7);
-        $$->is_mutable = 0;
-        $$->is_nullable = $5->is_nullable;
+    | CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+         $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7);
+         $$->is_mutable = 0;
+         $$->is_nullable = $5->is_nullable;
+         $$->type = $5->type;
     }
-  ;
-
+    ;
 
 multiVariableDeclaration:
     LPAREN variableDeclarationList RPAREN { $$ = $2; }
@@ -328,51 +379,113 @@ multiVariableDeclaration:
 
 variableDeclarationList:
     variableDeclaration { $$ = $1; }
-    | variableDeclarationList COMMA nl_opt variableDeclaration { $$ = alctree(0, "variableDeclarationList", 2, $1, $4); }
+    | variableDeclarationList COMMA nl_opt variableDeclaration { 
+         $$ = alctree(113, "variableDeclarationList", 2, $1, $4); 
+         $$->type = NULL; 
+      }
     ;
 
 returnType_section:
-    COLON nl_opt type { $$ = $3; $$->is_nullable = $3->is_nullable;}
+    COLON nl_opt type { $$ = $3; $$->is_nullable = $3->is_nullable; }
     ;
 
-// Expressions
 expression:
     disjunction { $$ = $1; }
     ;
 
 additive_expression:
     multiplicative_expression { $$ = $1; }
-    | additive_expression ADD multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
-    | additive_expression SUB multiplicative_expression { $$ = alctree(0, "additive_expression", 2, $1, $3); }
+    | additive_expression ADD multiplicative_expression { 
+          $$ = alctree(114, "additive_expression", 2, $1, $3);
+          if (check_type_compatibility($1->type, $3->type))
+              $$->type = $1->type;
+          else {
+              $$->type = double_typeptr;
+          }
+      }
+    | additive_expression SUB multiplicative_expression { 
+          $$ = alctree(115, "additive_expression", 2, $1, $3);
+          if (check_type_compatibility($1->type, $3->type))
+              $$->type = $1->type;
+          else {
+              $$->type = double_typeptr;
+          }
+      }
     ;
 
 expressionList:
-    expression { $$ = alctree(0, "expressionList", 1, $1); }
-    | expressionList COMMA expression { $$ = alctree(0, "expressionList", 2, $1, $3); }
+    expression { $$ = alctree(116, "expressionList", 1, $1); }
+    | expressionList COMMA expression { $$ = alctree(117, "expressionList", 2, $1, $3); }
     ;
 
 multiplicative_expression:
     logical_unary_expression { $$ = $1; }
-    | multiplicative_expression MULT logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
-    | multiplicative_expression DIV logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
-    | multiplicative_expression MOD logical_unary_expression { $$ = alctree(0, "multiplicative_expression", 2, $1, $3); }
+    | multiplicative_expression MULT logical_unary_expression { 
+          $$ = alctree(118, "multiplicative_expression", 2, $1, $3);
+          if (check_type_compatibility($1->type, $3->type))
+              $$->type = $1->type;
+          else {
+              $$->type = double_typeptr;
+          }
+      }
+    | multiplicative_expression DIV logical_unary_expression { 
+          $$ = alctree(119, "multiplicative_expression", 2, $1, $3);
+          if (check_type_compatibility($1->type, $3->type))
+              $$->type = $1->type;
+          else {
+              $$->type = double_typeptr;
+          }
+      }
+    | multiplicative_expression MOD logical_unary_expression { 
+          $$ = alctree(120, "multiplicative_expression", 2, $1, $3);
+          if (check_type_compatibility($1->type, $3->type))
+              $$->type = $1->type;
+          else {
+              $$->type = double_typeptr;
+          }
+      }
     ;
 
 primary_expression:
-    IntegerLiteral { $$ = alctree(IntegerLiteral, "IntegerLiteral", 1, $1); }
-    | RealLiteral { $$ = alctree(RealLiteral, "RealLiteral", 1, $1); }
-    | BooleanLiteral { $$ = alctree(BooleanLiteral, "BooleanLiteral", 1, $1); }
-    | NullLiteral { $$ = alctree(NullLiteral, "NullLiteral", 1, $1); }
-    | CharacterLiteral { $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); }
-    | Identifier { $$ = alctree(Identifier, "Identifier", 1, $1); }
-    | Identifier DOT primary_expression { $$ = alctree(0, "qualifiedName", 2, $1, $3); }
+    IntegerLiteral { 
+         $$ = alctree(IntegerLiteral, "IntegerLiteral", 1, $1); 
+         $$->type = integer_typeptr; 
+    }
+    | RealLiteral { 
+         $$ = alctree(RealLiteral, "RealLiteral", 1, $1); 
+         $$->type = double_typeptr; 
+    }
+    | BooleanLiteral { 
+         $$ = alctree(BooleanLiteral, "BooleanLiteral", 1, $1); 
+         $$->type = boolean_typeptr; 
+    }
+    | NullLiteral { 
+         $$ = alctree(NullLiteral, "NullLiteral", 1, $1); 
+         $$->type = null_typeptr; 
+    }
+    | CharacterLiteral { 
+         $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); 
+         $$->type = char_typeptr; 
+    }
+    | Identifier { 
+         $$ = alctree(Identifier, "Identifier", 1, $1); 
+         /* Type may be resolved later via symbol table lookup */
+         $$->type = NULL;
+    }
+    | Identifier DOT primary_expression { 
+         $$ = alctree(121, "qualifiedName", 2, $1, $3); 
+         $$->type = $3->type;
+    }
     | functionCall { $$ = $1; }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
 
-
 functionCall:
-    Identifier LPAREN functionCallArguments RPAREN nl_opt { $$ = alctree(0, "functionCall", 2, $1, $3); }
+    Identifier LPAREN functionCallArguments RPAREN nl_opt { 
+         $$ = alctree(122, "functionCall", 2, $1, $3); 
+         /* Function call type will be set later during semantic analysis after symbol resolution */
+         $$->type = NULL;
+    }
     ;
 
 functionCallArguments:
@@ -380,14 +493,17 @@ functionCallArguments:
     | expressionList { $$ = $1; }
     ;
 
-
 returnStatement:
-    RETURN expression { $$ = $2; }|
-    RETURN {$$ = $1;}
+    RETURN expression { $$ = $2; }
+    | RETURN { $$ = alctree(RETURN, "returnStatement", 0); $$->type = NULL; }
     ;
 
 typeAlias:
-    TYPE_ALIAS Identifier ASSIGNMENT type { $$ = alctree(TYPE_ALIAS, "typeAlias", 2, $2, $4); $$->is_nullable = $4->is_nullable;}
+    TYPE_ALIAS Identifier ASSIGNMENT type { 
+         $$ = alctree(TYPE_ALIAS, "typeAlias", 2, $2, $4); 
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
+    }
     ;
 
 %%

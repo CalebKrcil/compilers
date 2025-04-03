@@ -4,6 +4,7 @@
 #include <math.h>
 #include <ctype.h>
 #include "k0gram.tab.h"
+#include "semantics.h"
 #include "tree.h"
 #include "symtab.h"
 #define EXTENSION ".kt"
@@ -21,6 +22,8 @@ char *current_filename = NULL;
 int error_count = 0;
 #define MAX_ERROR_MSG_LENGTH 1024
 char last_token[256] = "";
+
+SymbolTable globalSymtab;
 
 struct tokenlist {
     struct token *t;
@@ -191,7 +194,7 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
     printf("Processing file: %s\n", filepath);
 
-    SymbolTable globalSymtab = mksymtab(50, NULL);
+    globalSymtab = mksymtab(50, NULL);
     set_package_scope_name(globalSymtab, "global");
     SymbolTable packageSymtab = mksymtab(50, globalSymtab);
     set_package_scope_name(packageSymtab, "main"); 
@@ -205,6 +208,10 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
         FuncSymbolTableList func_symtabs = printsyms(root, packageSymtab);
         
+        if (error_count == 0) {
+            check_semantics(root);
+        }
+
         if (error_count == 0) {
             printf("No errors\n");
 

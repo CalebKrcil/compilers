@@ -10,12 +10,13 @@ TREE_SRC = tree.c
 MAIN_SRC = main.c
 SYMTAB_SRC = symtab.c
 TYPE_SRC = type.c
+SEMANTICS_SRC = semantics.c
 
 LEX_OUT = k0lex.c
 YACC_OUT = k0gram.tab.c
 YACC_HEADER = k0gram.tab.h
 
-OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o type.o
+OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o type.o semantics.o
 
 all: $(TARGET)
 
@@ -34,7 +35,7 @@ k0gram.tab.o: $(YACC_OUT)
 k0lex.o: $(LEX_OUT)
 	$(CC) $(CFLAGS) -c $(LEX_OUT)
 
-tree.o: $(TREE_SRC) 
+tree.o: $(TREE_SRC)
 	$(CC) $(CFLAGS) -c $(TREE_SRC)
 
 main.o: $(MAIN_SRC)
@@ -45,6 +46,9 @@ symtab.o: $(SYMTAB_SRC)
 
 type.o: $(TYPE_SRC)
 	$(CC) $(CFLAGS) -c $(TYPE_SRC)
+
+semantics.o: $(SEMANTICS_SRC)
+	$(CC) $(CFLAGS) -c $(SEMANTICS_SRC)
 
 clean:
 	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET)

@@ -32,15 +32,15 @@ NUMBER    -?[0-9]+
 FLOAT     -?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)?
 HEX       0[xX][0-9a-fA-F]+
 STRING    \"(\\.|[^"\\])*\"|'(\\.|[^'\\])*'
-SHEBANG   ^#![^\r\n]*
+SHEBANG   ^#!*
 
 %%
 
-{SHEBANG}  { /* Ignore */ }
+{SHEBANG}  { yylineno++; }
 {WS}+      { /* Ignore */ }
 {NEWLINE}+ { yylineno++; return alctoken(NL, yytext);}
-"//".*     { /* Ignore line comments */ }
-"#".*      { /* Ignore hash-based comments */ }
+"//".*     { yylineno++; }
+"#".*      { yylineno++; }
 
 \"\"\"     { 
     BEGIN(IN_MULTILINE_STRING); 

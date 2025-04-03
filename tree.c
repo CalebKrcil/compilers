@@ -275,8 +275,10 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     t->symbolname = strdup(symbolname);
     t->nkids = nkids;
     t->leaf = NULL;
+    t->type = NULL;
     t->is_mutable = 0;
     t->is_nullable = 0;
+    t->lineno = yylineno;
 
     va_list args;
     va_start(args, nkids);
@@ -326,7 +328,11 @@ void printtree(struct tree *t, int depth) {
             printf("Leaf: %s - %s, Integer code: %d", t->symbolname, t->leaf->text, t->leaf->category);
         }
     } else {
-        printf("Node: %s", t->symbolname);
+        printf("Node: %s (prod: %d)", t->symbolname, t->prodrule);
+    }
+
+    if (t->type) {
+        printf(" type: %s", typename(t->type));
     }
 
     // Always print these flags for clarity

@@ -31,11 +31,15 @@ int hash(SymbolTable st, char *s) {
     return h;
 }
 
-typeptr typeptr_name(char *type_name){
+typeptr typeptr_name(char *type_name) {
     if (!type_name) return null_typeptr;
-    if (strcmp(type_name, "Int") == 0)
+    if (strcmp(type_name, "Int") == 0 ||
+        strcmp(type_name, "Short") == 0 ||
+        strcmp(type_name, "Long") == 0 ||
+        strcmp(type_name, "Byte") == 0)
         return integer_typeptr;
-    else if (strcmp(type_name, "Double") == 0)
+    else if (strcmp(type_name, "Double") == 0 ||
+             strcmp(type_name, "Float") == 0)
         return double_typeptr;
     else if (strcmp(type_name, "Boolean") == 0)
         return boolean_typeptr;
@@ -47,7 +51,6 @@ typeptr typeptr_name(char *type_name){
         return null_typeptr;
     else
         return alctype(ANY_TYPE);
-    return null_typeptr;
 }
 
 void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int is_mutable, int is_nullable) {

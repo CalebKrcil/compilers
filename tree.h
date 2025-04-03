@@ -33,6 +33,7 @@ struct tree {
     typeptr type;
     int is_mutable;
     int is_nullable;
+    int lineno;
 };
 
 typedef struct func_symtab_list {
