@@ -79,7 +79,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
 
         if (func_name) {
-            insert_symbol(st, func_name, FUNCTION, typeptr_name(return_type));
+            insert_symbol(st, func_name, FUNCTION, typeptr_name(return_type), 0, 0);
             //printf("Created function scope for: %s\n", func_name);
 
             current_scope = create_function_scope(st, func_name);
@@ -124,7 +124,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                         if (param_name) {
                             // printf("Inserting single function parameter: %s of type %s into %s\n",
                                 // param_name, param_type, current_scope->scope_name);
-                            insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
+                            insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type), 0, param_node->kids[1]->is_nullable);
                         }
                     }
                 }
@@ -155,7 +155,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                 if (param_name) {
                                     // printf("Inserting multi function parameter: %s of type %s into %s\n",
                                         // param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
+                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type),0, param_node->kids[1]->is_nullable);
                                 }
                             }
                         }
@@ -186,7 +186,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                                 if (param_name) {
                                     // printf("Inserting fallback function parameter: %s of type %s into %s\n",
                                         // param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type));
+                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type), 0, child->kids[1]->is_nullable);
                                 }
                             }
                         }
@@ -212,7 +212,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
 
             // printf("Inserting variable: %s of type %s into %s\n",
                     // var_name, var_type, current_scope->scope_name);
-            insert_symbol(current_scope, var_name, VARIABLE, typeptr_name(var_type));
+            insert_symbol(current_scope, var_name, VARIABLE, typeptr_name(var_type), t->is_mutable, t->is_nullable);
         }
     }
 
@@ -223,7 +223,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
                 // printf("Implicitly declaring variable: %s in %s\n",
                         // var_name, current_scope->scope_name);
-                insert_symbol(current_scope, var_name, VARIABLE, alctype(ANY_TYPE));  
+                insert_symbol(current_scope, var_name, VARIABLE, alctype(ANY_TYPE), 1, 1);  
             }
         }
     }
@@ -275,6 +275,8 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     t->symbolname = strdup(symbolname);
     t->nkids = nkids;
     t->leaf = NULL;
+    t->is_mutable = 0;
+    t->is_nullable = 0;
 
     va_list args;
     va_start(args, nkids);
@@ -315,21 +317,26 @@ void printtree(struct tree *t, int depth) {
 
     if (t->leaf) {
         if (t->leaf->category == IntegerLiteral) {
-            printf("Leaf: IntegerLiteral - %d, Integer code: %d\n", t->leaf->value.ival, t->leaf->category);
+            printf("Leaf: IntegerLiteral - %d, Integer code: %d", t->leaf->value.ival, t->leaf->category);
         } else if (t->leaf->category == RealLiteral) {
-            printf("Leaf: RealLiteral - %lf, Integer code: %d\n", t->leaf->value.dval, t->leaf->category);
+            printf("Leaf: RealLiteral - %lf, Integer code: %d", t->leaf->value.dval, t->leaf->category);
         } else if (t->leaf->category == CharacterLiteral) {
-            printf("Leaf: CharacterLiteral - '%s', Integer code: %d\n", t->leaf->value.sval, t->leaf->category);
+            printf("Leaf: CharacterLiteral - '%s', Integer code: %d", t->leaf->value.sval, t->leaf->category);
         } else {
-            printf("Leaf: %s - %s, Integer code: %d\n", t->symbolname, t->leaf->text, t->leaf->category);
+            printf("Leaf: %s - %s, Integer code: %d", t->symbolname, t->leaf->text, t->leaf->category);
         }
     } else {
-        printf("Node: %s\n", t->symbolname);
-        for (int i = 0; i < t->nkids; i++) {
-            printtree(t->kids[i], depth + 1);
-        }
+        printf("Node: %s", t->symbolname);
+    }
+
+    // Always print these flags for clarity
+    printf(" [mutable=%d nullable=%d]\n", t->is_mutable, t->is_nullable);
+
+    for (int i = 0; i < t->nkids; i++) {
+        printtree(t->kids[i], depth + 1);
     }
 }
+
 
 char *escape(char *s) {
     if (!s) return strdup("NULL");

@@ -95,15 +95,15 @@ declaration:
 
 // Property declaration
 propertyDeclaration:
-    PROPERTY Identifier COLON type nl_opt { $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); }
+    PROPERTY Identifier COLON type nl_opt { $$ = alctree(PROPERTY, "propertyDeclaration", 2, $2, $4); $$->is_nullable = $4->is_nullable;}
     ;
 
 // Type definition
 type:
-    Identifier { $$ = alctree(0, "type", 1, $1); }
-    | Identifier QUEST_NO_WS { $$ = alctree(0, "nullableType", 1, $1); }
-    | Identifier LANGLE type RANGLE { $$ = alctree(0, "genericType", 2, $1, $3); }
-    | Identifier LANGLE type RANGLE QUEST_NO_WS { $$ = alctree(0, "nullableGenericType", 2, $1, $3); }
+    Identifier { $$ = alctree(0, "type", 1, $1); $$->is_nullable = 0;}
+    | Identifier QUEST_NO_WS { $$ = alctree(0, "nullableType", 1, $1); $$->is_nullable = 1;}
+    | Identifier LANGLE type RANGLE { $$ = alctree(0, "genericType", 2, $1, $3); $$->is_nullable = 0;}
+    | Identifier LANGLE type RANGLE QUEST_NO_WS { $$ = alctree(0, "nullableGenericType", 2, $1, $3); $$->is_nullable = 1;}
     ;
 
 // Function declaration
@@ -123,7 +123,7 @@ functionParameterList_opt:
     ;
 
 functionValueParameter:
-    Identifier COLON type { $$ = alctree(0, "functionValueParameter", 2, $1, $3); }
+    Identifier COLON type { $$ = alctree(0, "functionValueParameter", 2, $1, $3); $$->is_nullable = $3->is_nullable;}
     ;
 
 // Function components
@@ -266,19 +266,61 @@ logical_unary_expression:
 
 // Variable declarations
 variableDeclaration:
-    VAL Identifier nl_opt { $$ = alctree(VAL, "variableDeclaration", 1, $2); }
-    | VAR Identifier nl_opt { $$ = alctree(VAR, "variableDeclaration", 1, $2); }
-    | CONST VAL Identifier nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 1, $3); }
-    | VAL Identifier COLON type nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
-    | VAR Identifier COLON type nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
-    | CONST VAL Identifier COLON type nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
-    | VAL Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAL, "variableDeclaration", 2, $2, $4); }
-    | VAR Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAR, "variableDeclaration", 2, $2, $4); }
-    | CONST VAL Identifier ASSIGNMENT boolExpression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5); }
-    | VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6); }
-    | VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6); }
-    | CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt { $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7); }
-    ;
+    VAL Identifier nl_opt {
+        $$ = alctree(VAL, "variableDeclaration", 1, $2);
+        $$->is_mutable = 0;
+    }
+    |VAR Identifier nl_opt {
+        $$ = alctree(VAR, "variableDeclaration", 1, $2);
+        $$->is_mutable = 1;
+    }
+    |CONST VAL Identifier nl_opt {
+        $$ = alctree(CONST, "constVariableDeclaration", 1, $3);
+        $$->is_mutable = 0;
+    }
+    |VAL Identifier COLON type nl_opt {
+        $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
+        $$->is_mutable = 0;
+        $$->is_nullable = $4->is_nullable;
+    }
+    |VAR Identifier COLON type nl_opt {
+        $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
+        $$->is_mutable = 1;
+        $$->is_nullable = $4->is_nullable;
+    }
+    |CONST VAL Identifier COLON type nl_opt {
+        $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
+        $$->is_mutable = 0;
+        $$->is_nullable = $5->is_nullable;
+    }
+    |VAL Identifier ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
+    }
+    |VAR Identifier ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
+        $$->is_mutable = 1;
+    }
+    |CONST VAL Identifier ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
+        $$->is_mutable = 0;
+    }
+    |VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6);
+        $$->is_mutable = 0;
+        $$->is_nullable = $4->is_nullable;
+    }
+    |VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6);
+        $$->is_mutable = 1;
+        $$->is_nullable = $4->is_nullable;
+    }
+    |CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
+        $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7);
+        $$->is_mutable = 0;
+        $$->is_nullable = $5->is_nullable;
+    }
+  ;
+
 
 multiVariableDeclaration:
     LPAREN variableDeclarationList RPAREN { $$ = $2; }
@@ -290,7 +332,7 @@ variableDeclarationList:
     ;
 
 returnType_section:
-    COLON nl_opt type { $$ = $3; }
+    COLON nl_opt type { $$ = $3; $$->is_nullable = $3->is_nullable;}
     ;
 
 // Expressions
@@ -345,7 +387,7 @@ returnStatement:
     ;
 
 typeAlias:
-    TYPE_ALIAS Identifier ASSIGNMENT type { $$ = alctree(TYPE_ALIAS, "typeAlias", 2, $2, $4); }
+    TYPE_ALIAS Identifier ASSIGNMENT type { $$ = alctree(TYPE_ALIAS, "typeAlias", 2, $2, $4); $$->is_nullable = $4->is_nullable;}
     ;
 
 %%

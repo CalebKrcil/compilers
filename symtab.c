@@ -50,7 +50,7 @@ typeptr typeptr_name(char *type_name){
     return null_typeptr;
 }
 
-void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type) {
+void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int is_mutable, int is_nullable) {
     if (lookup_symbol_current_scope(st, s)) {
         fprintf(stderr, "Error: Redeclaration of variable '%s'\n", s);
         error_count++;  
@@ -68,6 +68,8 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type) {
     newEntry->type = type;
     newEntry->table = st;
     newEntry->next = st->tbl[index];
+    newEntry->mutable = is_mutable;
+    newEntry->nullable = is_nullable;
     st->tbl[index] = newEntry;
     st->nEntries++;
 }
@@ -107,13 +109,6 @@ void print_symbols(SymbolTable st) {
     if (!st || !st->scope_name) return;
     printf("--- symbol table for: %s ---\n", st->scope_name);
 
-    for (int i = 0; i < st->nBuckets; i++) {
-        SymbolTableEntry entry = st->tbl[i];
-        while (entry) {
-            entry = entry->next;
-        }
-    }
-
     int symbol_count = 0;
     for (int i = 0; i < st->nBuckets; i++) {
         SymbolTableEntry entry = st->tbl[i];
@@ -129,12 +124,12 @@ void print_symbols(SymbolTable st) {
     }
 
     char **symbols = malloc(symbol_count * sizeof(char *));
-    char **types = malloc(symbol_count * sizeof(char *));
-    
-    if (!symbols || !types) {
+    char **info = malloc(symbol_count * sizeof(char *));  // now holds full info string
+
+    if (!symbols || !info) {
         fprintf(stderr, "Error: Memory allocation failed for symbol sorting\n");
         free(symbols);
-        free(types);
+        free(info);
         return;
     }
 
@@ -143,35 +138,46 @@ void print_symbols(SymbolTable st) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
             symbols[idx] = entry->s;
-            types[idx] = typename(entry->type);
+
+            char *type_str = typename(entry->type);
+            int total_len = strlen(type_str) + 50;
+            info[idx] = malloc(total_len);
+            snprintf(info[idx], total_len, "%s (mutable: %s, nullable: %s)",
+                     type_str,
+                     entry->mutable ? "yes" : "no",
+                     entry->nullable ? "yes" : "no");
+
             idx++;
             entry = entry->next;
         }
     }
 
+    // Insertion sort
     for (int i = 1; i < symbol_count; i++) {
         char *key_sym = symbols[i];
-        char *key_type = types[i];
+        char *key_info = info[i];
         int j = i - 1;
 
         while (j >= 0 && strcmp(symbols[j], key_sym) > 0) {
             symbols[j + 1] = symbols[j];
-            types[j + 1] = types[j];
+            info[j + 1] = info[j];
             j--;
         }
         symbols[j + 1] = key_sym;
-        types[j + 1] = key_type;
+        info[j + 1] = key_info;
     }
 
     for (int i = 0; i < symbol_count; i++) {
-        printf("    %s : %s\n", symbols[i], types[i]);
+        printf("    %s : %s\n", symbols[i], info[i]);
+        free(info[i]);  // free each individual string
     }
 
     printf("---\n\n");
 
     free(symbols);
-    free(types);
+    free(info);
 }
+
 
 static int shared_type(typeptr t) {
     if (t == integer_typeptr ||
@@ -233,12 +239,12 @@ void set_package_scope_name(SymbolTable st, char *package_name) {
 }
 
 void add_predefined_symbols(SymbolTable st) {
-    insert_symbol(st, "Int", CLASS_TYPE, integer_typeptr);
-    insert_symbol(st, "Double", CLASS_TYPE, double_typeptr);
-    insert_symbol(st, "Boolean", CLASS_TYPE, boolean_typeptr);
-    insert_symbol(st, "Char", CLASS_TYPE, char_typeptr);
-    insert_symbol(st, "String", CLASS_TYPE, alctype(STRING_TYPE));
-    insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr);
+    insert_symbol(st, "Int", CLASS_TYPE, integer_typeptr,0,0);
+    insert_symbol(st, "Double", CLASS_TYPE, double_typeptr,0,0);
+    insert_symbol(st, "Boolean", CLASS_TYPE, boolean_typeptr,0,0);
+    insert_symbol(st, "Char", CLASS_TYPE, char_typeptr,0,0);
+    insert_symbol(st, "String", CLASS_TYPE, alctype(STRING_TYPE),0,0);
+    insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr,0,1);
     
     
     char *print_params[] = {"String"};
@@ -266,10 +272,10 @@ void add_predefined_symbols(SymbolTable st) {
     char *substring_params[] = {"Int", "Int"};
     insert_method_symbol(st, "String", "substring", typeptr_name("String"), 2, substring_params);
     
-    insert_symbol(st, "java.util.Random", CLASS_TYPE, typeptr_name("Type"));
+    insert_symbol(st, "java.util.Random", CLASS_TYPE, typeptr_name("Type"),0,0);
     insert_method_symbol(st, "java.util.Random", "nextInt", typeptr_name("Int"), 0, NULL);
     
-    insert_symbol(st, "java.lang.Math", CLASS_TYPE, typeptr_name("Type"));
+    insert_symbol(st, "java.lang.Math", CLASS_TYPE, typeptr_name("Type"),0,0);
     
     char *abs_params[] = {"Double"};
     insert_method_symbol(st, "java.lang.Math", "abs", typeptr_name("Double"), 1, abs_params);

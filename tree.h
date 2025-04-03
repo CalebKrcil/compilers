@@ -31,6 +31,8 @@ struct tree {
     struct tree *kids[10];
     struct token *leaf;
     typeptr type;
+    int is_mutable;
+    int is_nullable;
 };
 
 typedef struct func_symtab_list {

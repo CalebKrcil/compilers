@@ -15,7 +15,9 @@ typedef struct sym_entry {
     char *s;
     SymbolKind kind;
     typeptr type;           
-    int param_count;      
+    int param_count; 
+    int mutable;
+    int nullable;     
     typeptr *param_types;   
     struct sym_table *table;
     struct sym_entry *next;
@@ -30,7 +32,7 @@ typedef struct sym_table {
 } *SymbolTable;
 
 SymbolTable mksymtab(int nBuckets, SymbolTable parent);
-void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type);
+void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int is_mutable, int is_nullable);
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s);
 SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s);
 void check_undeclared(SymbolTable st, char *s);
