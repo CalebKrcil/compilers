@@ -36,17 +36,34 @@ SHEBANG   ^#!*
 
 %%
 
-{SHEBANG}  { yylineno++; }
+{SHEBANG}  { /* Ignore */ }
 {WS}+      { /* Ignore */ }
-{NEWLINE}+ { yylineno++; return alctoken(NL, yytext);}
-"//".*     { yylineno++; }
-"#".*      { yylineno++; }
+{NEWLINE}+ {
+    int i = 0;
+    while (i < yyleng) {
+        if (yytext[i] == '\r') {
+            if ((i+1 < yyleng) && (yytext[i+1] == '\n')) {
+                i += 2;
+            } else {
+                i++;
+            }
+            yylineno++;
+        } else if (yytext[i] == '\n') {
+            i++;
+            yylineno++;
+        } else {
+            i++;
+        }
+    }
+    return alctoken(NL, yytext);
+}
+"//".*     { /* Ignore */ }
+"#".*      { /* Ignore */ }
 
 \"\"\"     { 
     BEGIN(IN_MULTILINE_STRING); 
     string_pos = 0; 
-    multiline_start_line = yylineno; 
-    memset(string_buffer, 0, sizeof(string_buffer)); 
+    memset(string_buffer, 0, sizeof(string_buffer));
 }
 
 "/*"  { comment_depth = 1; BEGIN(IN_COMMENT); }
@@ -202,7 +219,6 @@ SHEBANG   ^#!*
         update_last_token(yytext);
         
         // Restore line number to the start of the multiline string
-        yylineno = multiline_start_line;
         
         return alctoken(CharacterLiteral, yytext); 
     }
@@ -253,7 +269,7 @@ SHEBANG   ^#!*
 
 <IN_COMMENT>"/*"   { comment_depth++; }
 <IN_COMMENT>"*/"   { 
-    if (--comment_depth == 0) BEGIN(INITIAL); 
+    if (--comment_depth == 0) BEGIN(INITIAL);
 }
 
 <IN_COMMENT>\n { yylineno++; }

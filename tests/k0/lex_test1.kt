@@ -65,7 +65,7 @@ fun main() {
     val addition: Int = constantValue + mutableVariable
     val subtraction: Int = constantValue - mutableVariable
     val multiplication: Int = constantValue * mutableVariable
-    val division: Int = constantValue / mutableVariable
+    val division: Float = constantValue / mutableVariable
     val modulus: Int = constantValue % mutableVariable
 
     // Increment and decrement
