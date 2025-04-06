@@ -251,10 +251,10 @@ void add_predefined_symbols(SymbolTable st) {
     insert_symbol(st, "String", CLASS_TYPE, string_typeptr, 0, 0);
     insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr, 0, 1);
     
-    char *print_params[] = {"String"};
+    char *print_params[] = {"Any"};
     insert_method_symbol(st, "", "print", typeptr_name("Unit"), 1, print_params);
     
-    char *println_params[] = {"String"};
+    char *println_params[] = {"Any"};
     insert_method_symbol(st, "", "println", typeptr_name("Unit"), 1, println_params);
     
     insert_method_symbol(st, "", "readln", typeptr_name("String"), 0, NULL);

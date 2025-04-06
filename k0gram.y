@@ -43,7 +43,7 @@
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
 %type <treeptr> unaryExpression boolExpression returnStatement typeAlias
 %type <treeptr> expressionList breakStatement continueStatement disjunction conjunction
-%type <treeptr> equality comparison logical_unary_expression arrayInitializer
+%type <treeptr> equality comparison logical_unary_expression arrayInitializer arrayAccess
 
 %start program
 
@@ -118,9 +118,20 @@ type:
          $$->type = typeptr_name($1->leaf->text);
     }
     | Identifier LANGLE type RANGLE { 
-         $$ = alctree(104, "genericType", 2, $1, $3); 
-         $$->is_nullable = 0;
-         $$->type = typeptr_name($1->leaf->text);
+        $$ = alctree(104, "genericType", 2, $1, $3); 
+        $$->is_nullable = 0;
+        if (strcmp($1->leaf->text, "Array") == 0) {
+            /* Create an array type using the element type from $3.
+                You may use your alcarraytype function; here we assume
+                that the size will be determined later from the array initializer. */
+            $$->type = alcarraytype($3, NULL);
+            if ($3->type)
+                $$->type->u.a.elemtype = $3->type;
+            else
+                $$->type->u.a.elemtype = null_typeptr;
+        } else {
+            $$->type = typeptr_name($1->leaf->text);
+        }
     }
     | Identifier LANGLE type RANGLE QUEST_NO_WS { 
          $$ = alctree(105, "nullableGenericType", 2, $1, $3); 
@@ -261,6 +272,18 @@ assignment:
          $$ = alctree(SUB_ASSIGNMENT, "subAssignment", 2, $1, $3); 
          $$->type = $1->type;
     }
+    | arrayAccess ASSIGNMENT expression { 
+         $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
+    | arrayAccess ADD_ASSIGNMENT expression { 
+         $$ = alctree(ADD_ASSIGNMENT, "addAssignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
+    | arrayAccess SUB_ASSIGNMENT expression { 
+         $$ = alctree(SUB_ASSIGNMENT, "subAssignment", 2, $1, $3); 
+         $$->type = $1->type;
+    }
     | variableDeclaration { $$ = alctree(ASSIGNMENT, "assignment", 1, $1); $$->type = $1->type; }
     | multiVariableDeclaration ASSIGNMENT expression { $$ = alctree(ASSIGNMENT, "assignment", 2, $1, $3); $$->type = $1->type; }
     | unaryExpression { $$ = $1; }
@@ -388,10 +411,16 @@ variableDeclaration:
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
     }
-    | CONST VAL Identifier COLON type arrayInitializer nl_opt {
-         $$ = alctree(VAR, "arrayDeclaration", 3, $3, $5, $6);
+    | VAR Identifier COLON type ASSIGNMENT Identifier LANGLE type RANGLE arrayInitializer nl_opt {
+         $$ = alctree(VAR, "arrayAssignmentDeclaration", 5, $2, $4, $6, $8, $10);
+         $$->is_mutable = 1;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
+    }
+    | VAL Identifier COLON type ASSIGNMENT Identifier LANGLE type RANGLE arrayInitializer nl_opt {
+         $$ = alctree(VAL, "arrayAssignmentDeclaration", 5, $2, $4, $6, $8, $10);
          $$->is_mutable = 0;
-         $$->is_nullable = $5->is_nullable;
+         $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
     }
     ;
@@ -520,9 +549,16 @@ functionCallArguments:
     | expressionList { $$ = $1; }
     ;
 
+arrayAccess:
+    primary_expression LSQUARE expression RSQUARE { 
+         $$ = alctree(300, "arrayAccess", 2, $1, $3); 
+         $$->type = null_typeptr; 
+    }
+    ;
+
 arrayInitializer:
-    LPAREN expression RPAREN block { 
-         $$ = alctree(200, "arrayInitializer", 2, $2, $4); 
+    LPAREN expression RPAREN LCURL expression RCURL { 
+         $$ = alctree(200, "arrayInitializer", 2, $2, $5); 
          $$->type = NULL; 
     }
     ;

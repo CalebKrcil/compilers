@@ -20,6 +20,8 @@ void report_semantic_error(const char *msg, int lineno) {
 int check_type_compatibility(typeptr expected, typeptr actual) {
     if (!expected || !actual)
         return 0;
+    if (expected->basetype == ANY_TYPE || actual->basetype == ANY_TYPE)
+        return 1;
     if (expected == actual)
         return 1;
     if (expected->basetype == actual->basetype)
@@ -112,6 +114,31 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
            t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
     
+    if (t->symbolname && 
+    (strcmp(t->symbolname, "forStatementKotlinRange") == 0 || 
+        strcmp(t->symbolname, "forStatementKotlinRangeUntil") == 0)) {
+    
+        printf("DEBUG: For loop encountered at line %d. Creating new scope for loop variable.\n", t->lineno);
+        
+        // Create a new scope for the loop body.
+        SymbolTable loop_scope = create_function_scope(current_scope, "forLoop");
+        t->scope = loop_scope;
+        
+        // Assume that the loop variable is the first child (t->kids[0]).
+        if (t->kids[0] && t->kids[0]->leaf) {
+            char *loopVarName = t->kids[0]->leaf->text;
+            // Insert the loop variable into the new loop scope with type int.
+            insert_symbol(loop_scope, loopVarName, VARIABLE, integer_typeptr, 0, 0);
+            // Also update the AST node for the loop variable.
+            t->kids[0]->type = integer_typeptr;
+            t->kids[0]->is_mutable = 0; // You can mark it immutable if desired.
+            printf("DEBUG: Loop variable '%s' inserted with type int in new scope %p.\n", loopVarName, loop_scope);
+        }
+        
+        // Update the current scope for recursing into the loop body.
+        current_scope = loop_scope;
+    }
+
     // --- Function Declaration: Update Current Scope ---
     if (t->prodrule == 327 && t->scope != NULL) {
         printf("DEBUG: Function declaration encountered. Updating current scope.\n");
@@ -178,6 +205,19 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
+    if (t->symbolname && strcmp(t->symbolname, "arrayAccess") == 0) {
+        // t->kids[0] should be the expression for the array (e.g. data)
+        // t->kids[1] is the index.
+        if (t->kids[0]->type && t->kids[0]->type->basetype == ARRAY_TYPE) {
+            // Set the array access node’s type to the element type.
+            t->type = t->kids[0]->type->u.a.elemtype;
+            printf("DEBUG: Array access resolved: element type is %s\n", typename(t->type));
+        } else {
+            report_semantic_error("Array access on a non-array type", t->lineno);
+            t->type = null_typeptr;
+        }
+    }
+
     if (t->symbolname && strcmp(t->symbolname, "comparison") == 0 && t->nkids >= 2) {
         typeptr left = t->kids[0]->type;
         typeptr right = t->kids[1]->type;

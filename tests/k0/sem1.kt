@@ -36,6 +36,8 @@ fun main(args: Array<String>) {
    val longVal: Long = 10000000000
    val floatVal: Float = 2.5f
    val doubleVal: Double = 6.28
+   var a: Int = 1
+   var b: Int = 5
 
    // Test function call correctness
    val result: Double = average(a, b)
@@ -50,16 +52,16 @@ fun main(args: Array<String>) {
    }
 
    // Arrays and indexing
-   val data: Array<Int>(4) { 0 }
-   data[0] = 9
-   data[1] = 8
-   data[2] = data[0] + data[1]
-   println(data[2])
+//    var data: Array<Int>(4) { 0 }
+//    data[0] = 9
+//    data[1] = 8
+//    data[2] = data[0] + data[1]
+//    println(data[2])
 
-   // Boolean logic and comparisons
-   if (data[2] > 10 && status) {
-      println("Check passed")
-   }
+//    // Boolean logic and comparisons
+//    if (data[2] > 10 && status) {
+//       println("Check passed")
+//    }
 
    // for loop with range
    for (i in 1..3) {
