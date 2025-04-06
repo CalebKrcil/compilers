@@ -19,24 +19,17 @@ struct field {			/* members (fields) of structs */
 
 /* base types. How many more base types do we need? */
 #define FIRST_TYPE   1000000
-
 #define NONE_TYPE    1000000
 #define INT_TYPE     1000001
-#define DOUBLE_TYPE   1000002
+#define DOUBLE_TYPE  1000002
 #define BOOL_TYPE    1000003
-#define CHAR_TYPE    1000004
-#define STRING_TYPE  1000005
-#define ARRAY_TYPE   1000006
-#define FUNC_TYPE    1000007
-#define CLASSTYPE   1000008 /* in k0 these are only for a couple built-ins */
-#define PACKAGE_TYPE 1000009 /* do we need this for built-ins in k0? maybe */
-/* if we were doing a Lisp-like language, such as Python
-#define LIST_TYPE    1000010
-#define DICT_TYPE    1000011
-*/
-#define ANY_TYPE     1000010
-
-#define LAST_TYPE    1000010
+#define STRING_TYPE  1000004
+#define ARRAY_TYPE   1000005
+#define FUNC_TYPE    1000006
+#define CLASSTYPE    1000007
+#define PACKAGE_TYPE 1000008
+#define ANY_TYPE     1000009
+#define LAST_TYPE    1000009
 
 typedef struct typeinfo {
    int basetype;
@@ -65,11 +58,12 @@ char *typename(typeptr t);
 extern struct sym_table *global_table;
 extern typeptr integer_typeptr;
 extern typeptr double_typeptr;
-extern typeptr char_typeptr;
 extern typeptr null_typeptr;
 extern typeptr string_typeptr;
 extern typeptr boolean_typeptr;
 
 extern char *typenam[];
+
+void init_base_types(void);
 
 #endif

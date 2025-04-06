@@ -192,7 +192,7 @@ SHEBANG   ^#!*
 "in"            { update_last_token("in"); return alctoken(IN, yytext); }
 {NUMBER}      { update_last_token(yytext); return alctoken(IntegerLiteral, yytext); }
 {FLOAT}       { update_last_token(yytext); return alctoken(RealLiteral, yytext); }
-{STRING}      { update_last_token(yytext); return alctoken(CharacterLiteral, yytext); }
+{STRING}      { update_last_token(yytext); return alctoken(StringLiteral, yytext); }
 {ID}          { update_last_token(yytext); return alctoken(Identifier, yytext); }
 
 . {
@@ -220,7 +220,7 @@ SHEBANG   ^#!*
         
         // Restore line number to the start of the multiline string
         
-        return alctoken(CharacterLiteral, yytext); 
+        return alctoken(StringLiteral, yytext); 
     }
 
     \\\"\"\"  { 

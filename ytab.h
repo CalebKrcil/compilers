@@ -152,7 +152,7 @@
 #define LongLiteral 516
 #define BooleanLiteral 517
 #define NullLiteral 518
-#define CharacterLiteral 519
+#define StringLiteral 519
 #define UniCharacterLiteral 520
 #define EscapedIdentifier 521
 #define EscapeSeq 522

@@ -35,7 +35,7 @@ int alctoken(int category, char *text) {
         tok->value.ival = atoi(text);
     } else if (category == RealLiteral) {
         tok->value.dval = atof(text);
-    } else if (category == CharacterLiteral) {
+    } else if (category == StringLiteral) {
         tok->value.sval = strdup(text);
     } else {
         tok->value.sval = NULL;
@@ -255,7 +255,7 @@ void freetoken(struct token *t) {
     if (!t) return;
     free(t->text);
     free(t->filename);
-    if (t->category == CharacterLiteral) {
+    if (t->category == StringLiteral) {
         free(t->value.sval);
     }
     free(t);
@@ -322,8 +322,8 @@ void printtree(struct tree *t, int depth) {
             printf("Leaf: IntegerLiteral - %d, Integer code: %d", t->leaf->value.ival, t->leaf->category);
         } else if (t->leaf->category == RealLiteral) {
             printf("Leaf: RealLiteral - %lf, Integer code: %d", t->leaf->value.dval, t->leaf->category);
-        } else if (t->leaf->category == CharacterLiteral) {
-            printf("Leaf: CharacterLiteral - '%s', Integer code: %d", t->leaf->value.sval, t->leaf->category);
+        } else if (t->leaf->category == StringLiteral) {
+            printf("Leaf: StringLiteral - '%s', Integer code: %d", t->leaf->value.sval, t->leaf->category);
         } else {
             printf("Leaf: %s - %s, Integer code: %d", t->symbolname, t->leaf->text, t->leaf->category);
         }

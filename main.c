@@ -149,7 +149,7 @@ void add_token(int category, char *text, int lineno, const char *filename) {
     else if (category == RealLiteral) {
         new_token->value.dval = atof(text);
     }
-    else if (category == CharacterLiteral) {
+    else if (category == StringLiteral) {
         new_token->value.sval = process_escape_sequences(text);
     }
 
@@ -170,7 +170,7 @@ void free_tokens() {
         struct tokenlist *next = current->next;
         free(current->t->text);
         free(current->t->filename);
-        if (current->t->category == CharacterLiteral) free(current->t->value.sval);
+        if (current->t->category == StringLiteral) free(current->t->value.sval);
         free(current->t);
         free(current);
         current = next;

@@ -45,4 +45,6 @@ void set_package_scope_name(SymbolTable st, char *package_name);
 void add_predefined_symbols(SymbolTable st);
 void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, typeptr return_type, int param_count, char **param_types);
 
+extern SymbolTable currentFunctionSymtab;
+
 #endif

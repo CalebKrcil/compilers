@@ -7,6 +7,7 @@
 
 extern int error_count;
 extern SymbolTable globalSymtab;
+extern SymbolTable currentFunctionSymtab;
 
 void report_semantic_error(const char *msg, int lineno) {
     fprintf(stderr, "Semantic Error at line %d: %s\n", lineno, msg);
@@ -49,31 +50,90 @@ int is_null_literal(struct tree *t) {
    Adjust child indexes as needed by your AST structure.
 */
 void check_control_conditions(struct tree *t) {
-    if (!t) return;
+    if (!t)
+        return;
 
-    /* For if/if-else, assume condition is the first child. */
-    if (t->symbolname && (strcmp(t->symbolname, "ifStatement") == 0 ||
-                          strcmp(t->symbolname, "ifElseStatement") == 0)) {
-        struct tree *cond = t->kids[0];
-        if (!cond->type || cond->type->basetype != BOOL_TYPE) {
-            report_semantic_error("If-statement condition must be boolean", cond->lineno);
+    /* For if and if-else statements, assume the condition is the first child */
+    if (t->symbolname &&
+       (strcmp(t->symbolname, "ifStatement") == 0 ||
+        strcmp(t->symbolname, "ifElseStatement") == 0)) {
+        if (t->nkids < 1 || t->kids[0] == NULL) {
+            report_semantic_error("If-statement missing condition", t->lineno);
+        } else {
+            struct tree *cond = t->kids[0];
+            // Only resolve if the condition node is an Identifier
+            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
+                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
+                if (entry && entry->type) {
+                    cond->type = entry->type;
+                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
+                           cond->leaf->text, typename(entry->type));
+                } else {
+                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
+                }
+            }
+            if (!cond->type) {
+                report_semantic_error("If-statement condition has no type", cond->lineno);
+            } else if (cond->type->basetype != BOOL_TYPE) {
+                report_semantic_error("If-statement condition must be boolean", cond->lineno);
+            }
         }
     }
-    /* For while-statements, assume condition is the first child. */
+
+    /* For while-statements, assume condition is the first child */
     if (t->symbolname && strcmp(t->symbolname, "whileStatement") == 0) {
-        struct tree *cond = t->kids[0];
-        if (!cond->type || cond->type->basetype != BOOL_TYPE) {
-            report_semantic_error("While-statement condition must be boolean", cond->lineno);
+        if (t->nkids < 1 || t->kids[0] == NULL) {
+            report_semantic_error("While-statement missing condition", t->lineno);
+        } else {
+            struct tree *cond = t->kids[0];
+            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
+                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
+                if (entry && entry->type) {
+                    cond->type = entry->type;
+                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
+                           cond->leaf->text, typename(entry->type));
+                } else {
+                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
+                }
+            }
+            if (!cond->type) {
+                report_semantic_error("While-statement condition has no type", cond->lineno);
+            } else if (cond->type->basetype != BOOL_TYPE) {
+                report_semantic_error("While-statement condition must be boolean", cond->lineno);
+            }
         }
     }
-    /* For for-statements (the boolean condition alternative), assume condition is child[1]. */
+
+    /* For for-statements (the boolean condition alternative), assume condition is child[1] */
     if (t->symbolname && strcmp(t->symbolname, "forStatement") == 0) {
-        struct tree *cond = t->kids[1];
-        if (!cond->type || cond->type->basetype != BOOL_TYPE) {
-            report_semantic_error("For-statement condition must be boolean", cond->lineno);
+        if (t->nkids < 2 || t->kids[1] == NULL) {
+            report_semantic_error("For-statement missing condition", t->lineno);
+        } else {
+            struct tree *cond = t->kids[1];
+            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
+                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
+                if (entry && entry->type) {
+                    cond->type = entry->type;
+                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
+                           cond->leaf->text, typename(entry->type));
+                } else {
+                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
+                }
+            }
+            if (!cond->type) {
+                report_semantic_error("For-statement condition has no type", cond->lineno);
+            } else if (cond->type->basetype != BOOL_TYPE) {
+                report_semantic_error("For-statement condition must be boolean", cond->lineno);
+            }
         }
     }
 }
+
+
+
+
+
+
 
 void check_semantics(struct tree *t) {
     if (!t)

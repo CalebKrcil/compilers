@@ -4,6 +4,11 @@
 
 extern int error_count;
 
+/* Define the global current function symbol table.
+   This will be updated when a new function scope is created.
+*/
+SymbolTable currentFunctionSymtab = NULL;
+
 SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
     SymbolTable st = malloc(sizeof(struct sym_table));
     if (!st) {
@@ -43,10 +48,10 @@ typeptr typeptr_name(char *type_name) {
         return double_typeptr;
     else if (strcmp(type_name, "Boolean") == 0)
         return boolean_typeptr;
-    else if (strcmp(type_name, "Char") == 0)
-        return char_typeptr;
     else if (strcmp(type_name, "String") == 0)
-        return alctype(STRING_TYPE);
+        return string_typeptr;
+    else if (strcmp(type_name, "Type") == 0)
+        return alctype(CLASSTYPE);
     else if (strcmp(type_name, "Unit") == 0)
         return null_typeptr;
     else
@@ -141,8 +146,7 @@ void print_symbols(SymbolTable st) {
         SymbolTableEntry entry = st->tbl[i];
         while (entry) {
             symbols[idx] = entry->s;
-
-            char *type_str = typename(entry->type);
+            char *type_str = (entry->type ? typename(entry->type) : "(none)");
             int total_len = strlen(type_str) + 50;
             info[idx] = malloc(total_len);
             snprintf(info[idx], total_len, "%s (mutable: %s, nullable: %s)",
@@ -160,7 +164,6 @@ void print_symbols(SymbolTable st) {
         char *key_sym = symbols[i];
         char *key_info = info[i];
         int j = i - 1;
-
         while (j >= 0 && strcmp(symbols[j], key_sym) > 0) {
             symbols[j + 1] = symbols[j];
             info[j + 1] = info[j];
@@ -181,16 +184,14 @@ void print_symbols(SymbolTable st) {
     free(info);
 }
 
-
 static int shared_type(typeptr t) {
     if (t == integer_typeptr ||
-            t == double_typeptr ||
-            t == boolean_typeptr ||
-            t == char_typeptr ||
-            t == null_typeptr)
-            return 1;
+        t == double_typeptr ||
+        t == boolean_typeptr ||
+        t == string_typeptr ||
+        t == null_typeptr)
+        return 1;
     return 0;
-
 }
 
 void free_symbol_table(SymbolTable st) {
@@ -202,7 +203,7 @@ void free_symbol_table(SymbolTable st) {
             SymbolTableEntry temp = entry;
             entry = entry->next;
             free(temp->s);
-            if(!shared_type(temp->type))
+            if (!shared_type(temp->type))
                 free(temp->type);
             
             if (temp->param_count > 0 && temp->param_types) {
@@ -228,6 +229,8 @@ SymbolTable create_function_scope(SymbolTable parent, char *func_name) {
     if (st->scope_name) {
         sprintf(st->scope_name, "func %s", func_name);
     }
+    /* Set the global current function symbol table */
+    currentFunctionSymtab = st;
     return st;
 }
 
@@ -242,13 +245,11 @@ void set_package_scope_name(SymbolTable st, char *package_name) {
 }
 
 void add_predefined_symbols(SymbolTable st) {
-    insert_symbol(st, "Int", CLASS_TYPE, integer_typeptr,0,0);
-    insert_symbol(st, "Double", CLASS_TYPE, double_typeptr,0,0);
-    insert_symbol(st, "Boolean", CLASS_TYPE, boolean_typeptr,0,0);
-    insert_symbol(st, "Char", CLASS_TYPE, char_typeptr,0,0);
-    insert_symbol(st, "String", CLASS_TYPE, alctype(STRING_TYPE),0,0);
-    insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr,0,1);
-    
+    insert_symbol(st, "Int", CLASS_TYPE, integer_typeptr, 0, 0);
+    insert_symbol(st, "Double", CLASS_TYPE, double_typeptr, 0, 0);
+    insert_symbol(st, "Boolean", CLASS_TYPE, boolean_typeptr, 0, 0);
+    insert_symbol(st, "String", CLASS_TYPE, string_typeptr, 0, 0);
+    insert_symbol(st, "Unit", CLASS_TYPE, null_typeptr, 0, 1);
     
     char *print_params[] = {"String"};
     insert_method_symbol(st, "", "print", typeptr_name("Unit"), 1, print_params);
@@ -275,10 +276,10 @@ void add_predefined_symbols(SymbolTable st) {
     char *substring_params[] = {"Int", "Int"};
     insert_method_symbol(st, "String", "substring", typeptr_name("String"), 2, substring_params);
     
-    insert_symbol(st, "java.util.Random", CLASS_TYPE, typeptr_name("Type"),0,0);
+    insert_symbol(st, "java.util.Random", CLASS_TYPE, typeptr_name("Type"), 0, 0);
     insert_method_symbol(st, "java.util.Random", "nextInt", typeptr_name("Int"), 0, NULL);
     
-    insert_symbol(st, "java.lang.Math", CLASS_TYPE, typeptr_name("Type"),0,0);
+    insert_symbol(st, "java.lang.Math", CLASS_TYPE, typeptr_name("Type"), 0, 0);
     
     char *abs_params[] = {"Double"};
     insert_method_symbol(st, "java.lang.Math", "abs", typeptr_name("Double"), 1, abs_params);

@@ -10,7 +10,6 @@ fun main() {
 
     val a: Int = 10;
     val b: Float = 10.10;
-    var c: Char = '1'
     val d: String = "wow"
     val e: Int = -10
     val f: Float = -10.10
@@ -64,9 +63,9 @@ fun main() {
     // Arithmetic operators
     val addition: Int = constantValue + mutableVariable
     val subtraction: Int = constantValue - mutableVariable
-    val multiplication: Int = constantValue * mutableVariable
+    val multiplication: Float = constantValue * mutableVariable
     val division: Float = constantValue / mutableVariable
-    val modulus: Int = constantValue % mutableVariable
+    val modulus: Float = constantValue % mutableVariable
 
     // Increment and decrement
     mutableVariable++

@@ -30,7 +30,7 @@
 %token <treeptr> ABSTRACT FINAL OPEN CONST LATEINIT VARARG NOINLINE
 %token <treeptr> CROSSINLINE REIFIED EXPECT ACTUAL NL
 %token <treeptr> IntegerLiteral RealLiteral FloatLiteral DoubleLiteral
-%token <treeptr> BooleanLiteral NullLiteral CharacterLiteral Identifier
+%token <treeptr> BooleanLiteral NullLiteral StringLiteral Identifier
 %token <treeptr> HexLiteral BinLiteral
 
 %type <treeptr> program topLevelObject topLevelObjectList declaration 
@@ -463,9 +463,9 @@ primary_expression:
          $$ = alctree(NullLiteral, "NullLiteral", 1, $1); 
          $$->type = null_typeptr; 
     }
-    | CharacterLiteral { 
-         $$ = alctree(CharacterLiteral, "CharacterLiteral", 1, $1); 
-         $$->type = char_typeptr; 
+    | StringLiteral { 
+         $$ = alctree(StringLiteral, "StringLiteral", 1, $1); 
+         $$->type = string_typeptr; 
     }
     | Identifier { 
          $$ = alctree(Identifier, "Identifier", 1, $1); 
