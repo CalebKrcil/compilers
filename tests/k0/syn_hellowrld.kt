@@ -4,7 +4,7 @@ fun main(args: Array<String>) {
 }
 
 fun silly() {
-    val a: Int = 10
-    c = a + 10
+    var a: Int = 10
+    var c: Int = a + 10
     a = a + 10
 }

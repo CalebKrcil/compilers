@@ -1,7 +1,5 @@
-fun main () {
-    var booleanvar: Boolean = true
-    var teststring: String = "wow"
-    if (booleanvar) {
-        println(teststring)
-    }
+fun silly() {
+    var a: Int = 10
+    var c: Int = 10
+    c = a + 10
 }

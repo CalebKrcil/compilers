@@ -50,11 +50,50 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
         return;
     
-    // Print basic info for the current node.
+    // --- Early Propagation for Declarations ---
+    // If this node is a variable or constant declaration, propagate its type
+    // and flags (mutability, nullability) to the identifier child.
+    if (t->symbolname &&
+       (strcmp(t->symbolname, "variableDeclaration") == 0 ||
+        strcmp(t->symbolname, "constVariableDeclaration") == 0)) {
+        if (t->nkids > 0) {
+            if (t->type)
+                t->kids[0]->type = t->type;
+            t->kids[0]->is_mutable = t->is_mutable;
+            t->kids[0]->is_nullable = t->is_nullable;
+            printf("DEBUG: Propagated declaration info: identifier '%s' gets type %s, mutable=%d, nullable=%d\n",
+                   t->kids[0]->leaf ? t->kids[0]->leaf->text : "unknown",
+                   t->type ? typename(t->type) : "none",
+                   t->is_mutable, t->is_nullable);
+        }
+    }
+    
+    // --- Immediate Resolution for Identifier Nodes ---
+    // If this node is produced by the "Identifier" rule and its type is not yet set,
+    // try to resolve it now from the current scope.
+    if (t->symbolname && strcmp(t->symbolname, "Identifier") == 0 && !t->type) {
+        char *idText = NULL;
+        if (t->leaf && t->leaf->text)
+            idText = t->leaf->text;
+        else if (t->nkids > 0 && t->kids[0] && t->kids[0]->leaf && t->kids[0]->leaf->text)
+            idText = t->kids[0]->leaf->text;
+        if (idText) {
+            SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+            if (entry && entry->type) {
+                t->type = entry->type;
+                t->is_mutable = entry->mutable;
+                t->is_nullable = entry->nullable;
+                printf("DEBUG: Resolved Identifier '%s' to type %s, mutable=%d, nullable=%d\n",
+                       idText, typename(entry->type), entry->mutable, entry->nullable);
+            }
+        }
+    }
+    
+    // --- Print Current Node ---
     printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
            t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
-
-    // If this node is a function declaration (prod 327) and has an attached scope, update current_scope.
+    
+    // --- Function Declaration: Update Current Scope ---
     if (t->prodrule == 327 && t->scope != NULL) {
         printf("DEBUG: Function declaration encountered. Updating current scope.\n");
         if (t->kids[0] && t->kids[0]->leaf)
@@ -62,7 +101,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         current_scope = t->scope;
     }
     
-    // Recursively process all children first.
+    // --- Recurse into Children ---
     for (int i = 0; i < t->nkids; i++) {
         check_semantics_helper(t->kids[i], current_scope);
     }
@@ -73,24 +112,19 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         strcmp(t->symbolname, "ifElseStatement") == 0 ||
         strcmp(t->symbolname, "whileStatement") == 0 ||
         strcmp(t->symbolname, "forStatement") == 0)) {
-        
         struct tree *cond = NULL;
         if (strcmp(t->symbolname, "forStatement") == 0) {
-            // For for-statements, assume the condition is the second child.
             if (t->nkids >= 2)
                 cond = t->kids[1];
         } else {
-            // For if and while, assume the condition is the first child.
             cond = t->kids[0];
         }
         if (cond && strcmp(cond->symbolname, "Identifier") == 0 && !cond->type) {
-            // Try to obtain the identifier text. Sometimes the Identifier node itself is not a leaf.
             char *idText = NULL;
-            if (cond->leaf && cond->leaf->text) {
+            if (cond->leaf && cond->leaf->text)
                 idText = cond->leaf->text;
-            } else if (cond->nkids > 0 && cond->kids[0] && cond->kids[0]->leaf && cond->kids[0]->leaf->text) {
+            else if (cond->nkids > 0 && cond->kids[0] && cond->kids[0]->leaf && cond->kids[0]->leaf->text)
                 idText = cond->kids[0]->leaf->text;
-            }
             if (idText) {
                 printf("DEBUG: Attempting to resolve identifier '%s' in control structure condition.\n", idText);
                 SymbolTableEntry entry = lookup_symbol(current_scope, idText);
@@ -129,9 +163,23 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (t->symbolname && strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
         struct tree *lhs = t->kids[0];
         struct tree *rhs = t->kids[1];
-        
-        /* If lhs is not directly a variableDeclaration node, enforce immutability */
-        if (!(lhs->symbolname && strcmp(lhs->symbolname, "variableDeclaration") == 0)) {
+        // Force resolve the LHS if it's an Identifier lacking a type.
+        if (lhs->symbolname && strcmp(lhs->symbolname, "Identifier") == 0 && !lhs->type) {
+            char *idText = (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : NULL;
+            if (idText) {
+                SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+                if (entry && entry->type) {
+                    lhs->type = entry->type;
+                    lhs->is_mutable = entry->mutable;
+                    lhs->is_nullable = entry->nullable;
+                    printf("DEBUG: (Assignment LHS) Resolved '%s' to type %s, mutable=%d, nullable=%d\n",
+                           idText, typename(entry->type), entry->mutable, entry->nullable);
+                }
+            }
+        }
+        // Check for immutability.
+        if (!(lhs->symbolname && (strcmp(lhs->symbolname, "variableDeclaration") == 0 ||
+                                   strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
             if (!lhs->is_mutable) {
                 report_semantic_error("Assignment to immutable variable", lhs->lineno);
             }
@@ -149,16 +197,77 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Binary Operators ---
+    // --- Binary Operator Type Checking ---
     if (is_operator(t->prodrule)) {
-        if (t->nkids >= 2) {
-            if (!check_type_compatibility(t->kids[0]->type, t->kids[1]->type)) {
+        // Force-resolve left operand if it's an Identifier lacking a type.
+        if (t->kids[0]->symbolname && strcmp(t->kids[0]->symbolname, "Identifier") == 0 && !t->kids[0]->type) {
+            char *idText = (t->kids[0]->leaf && t->kids[0]->leaf->text) ? t->kids[0]->leaf->text : NULL;
+            if (idText) {
+                SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+                if (entry && entry->type) {
+                    t->kids[0]->type = entry->type;
+                    printf("DEBUG: (Operator left) Resolved '%s' to type %s\n", idText, typename(entry->type));
+                }
+            }
+        }
+        // Force-resolve right operand if it's an Identifier lacking a type.
+        if (t->kids[1]->symbolname && strcmp(t->kids[1]->symbolname, "Identifier") == 0 && !t->kids[1]->type) {
+            char *idText = (t->kids[1]->leaf && t->kids[1]->leaf->text) ? t->kids[1]->leaf->text : NULL;
+            if (idText) {
+                SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+                if (entry && entry->type) {
+                    t->kids[1]->type = entry->type;
+                    printf("DEBUG: (Operator right) Resolved '%s' to type %s\n", idText, typename(entry->type));
+                }
+            }
+        }
+        
+        typeptr left = t->kids[0]->type;
+        typeptr right = t->kids[1]->type;
+        int prod = t->prodrule;
+        
+        // For addition (prod 114) and subtraction (prod 115)
+        if (prod == 114 || prod == 115) {
+            if (check_type_compatibility(left, integer_typeptr) &&
+                check_type_compatibility(right, integer_typeptr)) {
+                t->type = integer_typeptr;
+            }
+            else if ((check_type_compatibility(left, double_typeptr) || check_type_compatibility(right, double_typeptr)) &&
+                     ((check_type_compatibility(left, integer_typeptr) || check_type_compatibility(left, double_typeptr)) &&
+                      (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr)))) {
+                t->type = double_typeptr;
+            }
+            else if (prod == 114 && check_type_compatibility(left, string_typeptr) &&
+                     (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr))) {
+                t->type = string_typeptr;
+            }
+            else {
+                report_semantic_error("Invalid operands for addition/subtraction", t->lineno);
+            }
+        }
+        // For multiplicative operators (prod 118, 119, 120)
+        else if (prod == 118 || prod == 119 || prod == 120) {
+            if (check_type_compatibility(left, integer_typeptr) &&
+                check_type_compatibility(right, integer_typeptr)) {
+                t->type = double_typeptr;
+            }
+            else if ((check_type_compatibility(left, integer_typeptr) || check_type_compatibility(left, double_typeptr)) &&
+                     (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr))) {
+                t->type = double_typeptr;
+            }
+            else {
+                report_semantic_error("Invalid operands for multiplicative operator", t->lineno);
+            }
+        }
+        else {
+            if (!check_type_compatibility(left, right)) {
                 report_semantic_error("Operator operands have incompatible types", t->kids[0]->lineno);
             }
+            t->type = left;
         }
     }
     
-    // --- Function Calls (production 122) ---
+    // --- Function Call Checks (production 122) ---
     if (t->prodrule == 122) {
         SymbolTableEntry func_entry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
         if (func_entry) {
@@ -176,12 +285,10 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     }
     
     // --- Unresolved Identifier Resolution ---
-    // If this node is a leaf identifier and its type is not set, attempt resolution.
     if (!t->type && (t->leaf && t->leaf->category == Identifier)) {
         char *idText = t->leaf->text;
-        if (!idText && t->nkids > 0 && t->kids[0] && t->kids[0]->leaf) {
+        if (!idText && t->nkids > 0 && t->kids[0] && t->kids[0]->leaf)
             idText = t->kids[0]->leaf->text;
-        }
         if (idText) {
             SymbolTableEntry entry = lookup_symbol(current_scope, idText);
             if (entry && entry->type) {
@@ -193,7 +300,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
 }
-
 
 
 void check_semantics(struct tree *t) {
