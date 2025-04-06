@@ -43,7 +43,7 @@
 %type <treeptr> primary_expression forInit forUpdate functionCall functionCallArguments 
 %type <treeptr> unaryExpression boolExpression returnStatement typeAlias
 %type <treeptr> expressionList breakStatement continueStatement disjunction conjunction
-%type <treeptr> equality comparison logical_unary_expression
+%type <treeptr> equality comparison logical_unary_expression arrayInitializer
 
 %start program
 
@@ -371,6 +371,24 @@ variableDeclaration:
          $$->is_nullable = $5->is_nullable;
          $$->type = $5->type;
     }
+    | VAL Identifier COLON type arrayInitializer nl_opt {
+         $$ = alctree(VAR, "arrayDeclaration", 3, $2, $4, $5);
+         $$->is_mutable = 0;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
+    }
+    | VAR Identifier COLON type arrayInitializer nl_opt {
+         $$ = alctree(VAR, "arrayDeclaration", 3, $2, $4, $5);
+         $$->is_mutable = 1;
+         $$->is_nullable = $4->is_nullable;
+         $$->type = $4->type;
+    }
+    | CONST VAL Identifier COLON type arrayInitializer nl_opt {
+         $$ = alctree(VAR, "arrayDeclaration", 3, $3, $5, $6);
+         $$->is_mutable = 0;
+         $$->is_nullable = $5->is_nullable;
+         $$->type = $4->type;
+    }
     ;
 
 multiVariableDeclaration:
@@ -476,6 +494,10 @@ primary_expression:
          $$ = alctree(121, "qualifiedName", 2, $1, $3); 
          $$->type = $3->type;
     }
+    | primary_expression LSQUARE expression RSQUARE { 
+         $$ = alctree(300, "arrayAccess", 2, $1, $3); 
+         $$->type = null_typeptr;
+    }
     | functionCall { $$ = $1; }
     | LPAREN expression RPAREN { $$ = $2; }
     ;
@@ -491,6 +513,13 @@ functionCall:
 functionCallArguments:
     /* epsilon */ { $$ = NULL; }
     | expressionList { $$ = $1; }
+    ;
+
+arrayInitializer:
+    LPAREN expression RPAREN block { 
+         $$ = alctree(200, "arrayInitializer", 2, $2, $4); 
+         $$->type = NULL; 
+    }
     ;
 
 returnStatement:

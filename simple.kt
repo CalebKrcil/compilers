@@ -1,8 +1,10 @@
-fun undeclaredFunction(x: Int): Int{
-    return x + 3
+fun main() {
+    var a: Int = 3
+    var b: Int = 4
+    var x: Int = sum(a, b)
 }
 
-fun main(){
-    val z: Int = undeclaredFunction(3)
-    println("wow done")
+
+fun sum(x: Int, y: Int): Int {
+    return x + y
 }

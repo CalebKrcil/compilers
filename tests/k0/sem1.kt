@@ -50,7 +50,7 @@ fun main(args: Array<String>) {
    }
 
    // Arrays and indexing
-   val data: Array<Int> = Array<Int>(4) { 0 }
+   val data: Array<Int>(4) { 0 }
    data[0] = 9
    data[1] = 8
    data[2] = data[0] + data[1]

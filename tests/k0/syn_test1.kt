@@ -25,7 +25,7 @@ fun main() {
     }
 
     // While Loop
-    var counter = 3
+    var counter: Int = 3
     while (counter > 0) {
         println("Countdown: $counter")
         counter = counter - 1
@@ -38,12 +38,12 @@ fun main() {
     }
 
     // Function Calls
-    val squared = square(4)
+    val squared: Float = square(4)
     println("Squared: $squared")
 
     // Boolean Expressions & Logical Operators
-    val x = true
-    val y = false
+    val x: Boolean = true
+    val y: Boolean = false
     if (x && !y) {
         println("Boolean logic works!")
     }
@@ -59,7 +59,7 @@ fun main() {
 }
 
 // Function Definitions
-fun square(n: Int): Int {
+fun square(n: Int): Float {
     return n * n
 }
 

@@ -40,6 +40,25 @@ int is_operator(int prodrule) {
     }
 }
 
+void flattenExpressionList(struct tree *exprList, struct tree ***args, int *count) {
+    if (!exprList) return;
+    // If the node is an expression list, then it might be a nested structure.
+    if (exprList->symbolname && strcmp(exprList->symbolname, "expressionList") == 0) {
+        for (int i = 0; i < exprList->nkids; i++) {
+            flattenExpressionList(exprList->kids[i], args, count);
+        }
+    } else {
+        // Otherwise, this node represents a single argument.
+        *args = realloc(*args, ((*count) + 1) * sizeof(struct tree *));
+        if (!(*args)) {
+            fprintf(stderr, "Memory allocation failed in flattenExpressionList\n");
+            exit(1);
+        }
+        (*args)[*count] = exprList;
+        (*count)++;
+    }
+}
+
 int is_null_literal(struct tree *t) {
     if (!t || !t->leaf)
         return 0;
@@ -284,9 +303,14 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         int prod = t->prodrule;
         
         // For addition (prod 114) and subtraction (prod 115)
-        if (prod == 114 || prod == 115) {
-            if (check_type_compatibility(left, integer_typeptr) &&
-                check_type_compatibility(right, integer_typeptr)) {
+        if (prod == 114) {  // addition operator
+            // If either operand is a string, treat the operation as string concatenation.
+            if (check_type_compatibility(left, string_typeptr) ||
+                check_type_compatibility(right, string_typeptr)) {
+                t->type = string_typeptr;
+            }
+            else if (check_type_compatibility(left, integer_typeptr) &&
+                     check_type_compatibility(right, integer_typeptr)) {
                 t->type = integer_typeptr;
             }
             else if ((check_type_compatibility(left, double_typeptr) || check_type_compatibility(right, double_typeptr)) &&
@@ -294,12 +318,8 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                       (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr)))) {
                 t->type = double_typeptr;
             }
-            else if (prod == 114 && check_type_compatibility(left, string_typeptr) &&
-                     (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr))) {
-                t->type = string_typeptr;
-            }
             else {
-                report_semantic_error("Invalid operands for addition/subtraction", t->lineno);
+                report_semantic_error("Invalid operands for addition", t->lineno);
             }
         }
         // For multiplicative operators (prod 118, 119, 120)
@@ -328,33 +348,42 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (t->prodrule == 122) {
         char *funcName = t->kids[0]->leaf->text;
         printf("DEBUG: Checking function call for '%s' at line %d\n", funcName, t->kids[0]->lineno);
+        // Use current_scope so that functions declared in package or global scope are found.
         SymbolTableEntry func_entry = lookup_symbol(current_scope, funcName);
         
         if (!func_entry) {
             printf("DEBUG: Undefined function '%s' in current scope chain starting at %p\n", funcName, current_scope);
             report_semantic_error("Undefined function", t->kids[0]->lineno);
         } else {
-            int expected = func_entry->param_count;
-            int actual = (t->kids[1] != NULL) ? t->kids[1]->nkids : 0;
-            printf("DEBUG: Function '%s' expects %d parameter(s), but call has %d argument(s).\n",
-                   funcName, expected, actual);
+            // Flatten the argument list.
+            struct tree **args = NULL;
+            int actual = 0;
+            flattenExpressionList(t->kids[1], &args, &actual);
+            printf("DEBUG: Function '%s' expects %d parameter(s), call has %d argument(s).\n",
+                   funcName, func_entry->param_count, actual);
             
-            if (expected != actual) {
+            if (func_entry->param_count != actual) {
                 report_semantic_error("Function call argument count mismatch", t->kids[0]->lineno);
             }
-            // Check parameter types if they are available
+            // Check that each argument's type is compatible with the expected parameter type.
             for (int i = 0; i < actual; i++) {
-                if (!check_type_compatibility(func_entry->param_types[i], t->kids[1]->kids[i]->type)) {
-                    report_semantic_error("Function call argument type mismatch", t->kids[1]->kids[i]->lineno);
+                if (!check_type_compatibility(func_entry->param_types[i], args[i]->type)) {
+                    char errMsg[256];
+                    snprintf(errMsg, sizeof(errMsg),
+                             "Function call argument type mismatch for parameter %d: expected %s, got %s",
+                             i, (func_entry->param_types[i] ? typename(func_entry->param_types[i]) : "none"),
+                             (args[i]->type ? typename(args[i]->type) : "none"));
+                    report_semantic_error(errMsg, args[i]->lineno);
                 }
             }
-            // Set the type of the function call to the function's return type.
+            // Optionally, set the type of the function call node to the function's return type.
             if (func_entry->type && func_entry->type->u.f.returntype) {
                 t->type = func_entry->type->u.f.returntype;
             } else {
                 printf("DEBUG: Function '%s' has no recorded return type.\n", funcName);
                 t->type = null_typeptr;
             }
+            free(args);
         }
     }
     
