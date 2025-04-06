@@ -302,7 +302,11 @@ void add_predefined_symbols(SymbolTable st) {
 void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, 
     typeptr return_type, int param_count, char **param_types) {
     char full_name[256];
-    sprintf(full_name, "%s.%s", class_name, method_name);
+    if (!strcmp(class_name, "")) {
+        sprintf(full_name, "%s", method_name);
+    } else {
+        sprintf(full_name, "%s.%s", class_name, method_name);
+    }
 
     int index = hash(st, full_name);
     SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));

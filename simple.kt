@@ -1,5 +1,8 @@
-fun silly() {
-    var a: Int = 10
-    var c: Int = 10
-    c = a + 10
+fun undeclaredFunction(x: Int): Int{
+    return x + 3
+}
+
+fun main(){
+    val z: Int = undeclaredFunction(3)
+    println("wow done")
 }

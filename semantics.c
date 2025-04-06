@@ -159,24 +159,81 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
+    if (t->symbolname && strcmp(t->symbolname, "comparison") == 0 && t->nkids >= 2) {
+        typeptr left = t->kids[0]->type;
+        typeptr right = t->kids[1]->type;
+        printf("DEBUG: In comparison operator at line %d. Left type: %s, Right type: %s\n",
+               t->lineno,
+               (left ? typename(left) : "none"),
+               (right ? typename(right) : "none"));
+        
+        // Allow numeric comparisons or string comparisons.
+        int leftIsNumeric = (check_type_compatibility(left, integer_typeptr) || check_type_compatibility(left, double_typeptr));
+        int rightIsNumeric = (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr));
+        int bothString = (check_type_compatibility(left, string_typeptr) && check_type_compatibility(right, string_typeptr));
+        
+        if (!( (leftIsNumeric && rightIsNumeric) || bothString )) {
+            report_semantic_error("Invalid operands for comparison operator", t->lineno);
+        }
+        
+        // The type of any comparison is boolean.
+        t->type = boolean_typeptr;
+    }
+
     // --- Assignment Checks ---
     if (t->symbolname && strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
         struct tree *lhs = t->kids[0];
         struct tree *rhs = t->kids[1];
-        // Force resolve the LHS if it's an Identifier lacking a type.
-        if (lhs->symbolname && strcmp(lhs->symbolname, "Identifier") == 0 && !lhs->type) {
-            char *idText = (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : NULL;
-            if (idText) {
+    
+        printf("DEBUG: Assignment at line %d. LHS token: '%s'\n",
+               lhs->lineno,
+               (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : "unknown");
+    
+        if (lhs->type) {
+            printf("DEBUG: LHS type pointer: %p, basetype: %d (%s)\n",
+                   lhs->type, lhs->type->basetype, typename(lhs->type));
+        } else {
+            printf("DEBUG: LHS type is NULL\n");
+        }
+        printf("DEBUG: LHS mutable flag: %d\n", lhs->is_mutable);
+    
+        // Force resolution if the type is NULL or has basetype NONE_TYPE.
+        if (lhs->leaf) {
+            if (lhs->type == NULL || lhs->type->basetype == NONE_TYPE) {
+                char *idText = lhs->leaf->text;
+                printf("DEBUG: Attempting to resolve identifier '%s'\n", idText);
                 SymbolTableEntry entry = lookup_symbol(current_scope, idText);
-                if (entry && entry->type) {
-                    lhs->type = entry->type;
-                    lhs->is_mutable = entry->mutable;
-                    lhs->is_nullable = entry->nullable;
-                    printf("DEBUG: (Assignment LHS) Resolved '%s' to type %s, mutable=%d, nullable=%d\n",
-                           idText, typename(entry->type), entry->mutable, entry->nullable);
+                if (entry) {
+                    printf("DEBUG: Lookup for '%s': entry pointer=%p, entry->mutable=%d\n",
+                           idText, entry, entry->mutable);
+                    if (entry->type) {
+                        printf("DEBUG: Entry type pointer=%p, basetype=%d (%s)\n",
+                               entry->type, entry->type->basetype, typename(entry->type));
+                        lhs->type = entry->type;
+                        lhs->is_mutable = entry->mutable;
+                        lhs->is_nullable = entry->nullable;
+                        printf("DEBUG: Resolved '%s': new LHS type pointer=%p, basetype=%d (%s), mutable=%d\n",
+                               idText, lhs->type, lhs->type->basetype, typename(lhs->type), lhs->is_mutable);
+                    } else {
+                        printf("DEBUG: Entry for '%s' has no type\n", idText);
+                    }
+                } else {
+                    printf("DEBUG: Lookup for '%s' returned NULL\n", idText);
                 }
+            } else {
+                printf("DEBUG: Skipping resolution because LHS type is not NONE_TYPE (basetype=%d, %s)\n",
+                       lhs->type->basetype, typename(lhs->type));
             }
         }
+    
+        printf("DEBUG: Final LHS state: token='%s', mutable=%d, type pointer=%p, basetype=%d (%s), lineno=%d\n",
+               (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : "unknown",
+               lhs->is_mutable,
+               lhs->type,
+               lhs->type ? lhs->type->basetype : -1,
+               lhs->type ? typename(lhs->type) : "none",
+               lhs->lineno);
+    
         // Check for immutability.
         if (!(lhs->symbolname && (strcmp(lhs->symbolname, "variableDeclaration") == 0 ||
                                    strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
@@ -196,7 +253,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             report_semantic_error(errMsg, rhs->lineno);
         }
     }
-    
+
     // --- Binary Operator Type Checking ---
     if (is_operator(t->prodrule)) {
         // Force-resolve left operand if it's an Identifier lacking a type.
@@ -269,17 +326,34 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     
     // --- Function Call Checks (production 122) ---
     if (t->prodrule == 122) {
-        SymbolTableEntry func_entry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
-        if (func_entry) {
+        char *funcName = t->kids[0]->leaf->text;
+        printf("DEBUG: Checking function call for '%s' at line %d\n", funcName, t->kids[0]->lineno);
+        SymbolTableEntry func_entry = lookup_symbol(current_scope, funcName);
+        
+        if (!func_entry) {
+            printf("DEBUG: Undefined function '%s' in current scope chain starting at %p\n", funcName, current_scope);
+            report_semantic_error("Undefined function", t->kids[0]->lineno);
+        } else {
             int expected = func_entry->param_count;
             int actual = (t->kids[1] != NULL) ? t->kids[1]->nkids : 0;
+            printf("DEBUG: Function '%s' expects %d parameter(s), but call has %d argument(s).\n",
+                   funcName, expected, actual);
+            
             if (expected != actual) {
                 report_semantic_error("Function call argument count mismatch", t->kids[0]->lineno);
             }
+            // Check parameter types if they are available
             for (int i = 0; i < actual; i++) {
                 if (!check_type_compatibility(func_entry->param_types[i], t->kids[1]->kids[i]->type)) {
                     report_semantic_error("Function call argument type mismatch", t->kids[1]->kids[i]->lineno);
                 }
+            }
+            // Set the type of the function call to the function's return type.
+            if (func_entry->type && func_entry->type->u.f.returntype) {
+                t->type = func_entry->type->u.f.returntype;
+            } else {
+                printf("DEBUG: Function '%s' has no recorded return type.\n", funcName);
+                t->type = null_typeptr;
             }
         }
     }
