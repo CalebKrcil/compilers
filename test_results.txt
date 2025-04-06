@@ -4,28 +4,7 @@ PASS: tests/errors/lex_test12.kt
 PASS: tests/errors/syn2.kt
 PASS: tests/errors/syn3.kt
 PASS: tests/errors/lex_test53.kt
-FAIL: tests/errors/syn8.kt
-Expected Error, but got:
-Processing file: tests/errors/syn8.kt
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x562071135dd0
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'outer' has scope pointer: 0x562071135b10
-DEBUG: Entering node: outer (prod: 396) at line 0, scope: 0x562071135b10
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x562071135b10
-DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x562071135b10
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x562071135b10
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'inner' has scope pointer: 0x562071135dd0
-DEBUG: Entering node: inner (prod: 396) at line 0, scope: 0x562071135dd0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x562071135dd0
-DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x562071135dd0
-DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x562071135dd0
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x562071135dd0
-DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x562071135dd0
-DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x562071135dd0
-DEBUG: Entering node: "Nested function" (prod: 395) at line 0, scope: 0x562071135dd0
-No errors
-
+PASS: tests/errors/syn8.kt
 PASS: tests/errors/lex_test39.kt
 PASS: tests/errors/sem7.kt
 PASS: tests/errors/lex_test19.kt
@@ -36,25 +15,7 @@ PASS: tests/errors/lex_test4.kt
 PASS: tests/errors/lex_test11.kt
 PASS: tests/errors/lex_test21.kt
 PASS: tests/errors/sem4.kt
-FAIL: tests/errors/sem8.kt
-Expected Error, but got:
-Processing file: tests/errors/sem8.kt
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 3, scope: 0x560b61287200
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x560b61287200
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x560b61287200
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x560b61287200
-DEBUG: Entering node: block (prod: 111) at line 3, scope: 0x560b61287200
-DEBUG: Entering node: functionCall (prod: 122) at line 3, scope: 0x560b61287200
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x560b61287200
-DEBUG: Entering node: expressionList (prod: 116) at line 2, scope: 0x560b61287200
-DEBUG: Entering node: comparison (prod: 299) at line 2, scope: 0x560b61287200
-DEBUG: Entering node: StringLiteral (prod: 395) at line 2, scope: 0x560b61287200
-DEBUG: Entering node: "hi" (prod: 395) at line 0, scope: 0x560b61287200
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 2, scope: 0x560b61287200
-DEBUG: Entering node: 3 (prod: 389) at line 0, scope: 0x560b61287200
-No errors
-
+PASS: tests/errors/sem8.kt
 PASS: tests/errors/lex_test13.kt
 PASS: tests/errors/lex_test1.kt
 PASS: tests/errors/lex_test22.kt
@@ -75,26 +36,7 @@ PASS: tests/errors/lex_test20.kt
 PASS: tests/errors/lex_test23.kt
 PASS: tests/errors/lex_test48.kt
 PASS: tests/errors/lex_test32.kt
-FAIL: tests/errors/sem9.kt
-Expected Error, but got:
-Processing file: tests/errors/sem9.kt
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x5620750aa330
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x5620750aa330
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x5620750aa330
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x5620750aa330
-DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x5620750aa330
-DEBUG: Entering node: assignment (prod: 280) at line 4, scope: 0x5620750aa330
-DEBUG: Propagated declaration info: identifier 'z' gets type none, mutable=0, nullable=0
-DEBUG: Entering node: variableDeclaration (prod: 329) at line 4, scope: 0x5620750aa330
-DEBUG: Entering node: z (prod: 396) at line 0, scope: 0x5620750aa330
-DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x5620750aa330
-DEBUG: Entering node: undeclaredFunction (prod: 396) at line 0, scope: 0x5620750aa330
-DEBUG: Entering node: expressionList (prod: 116) at line 2, scope: 0x5620750aa330
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 2, scope: 0x5620750aa330
-DEBUG: Entering node: 3 (prod: 389) at line 0, scope: 0x5620750aa330
-No errors
-
+PASS: tests/errors/sem9.kt
 PASS: tests/errors/lex_test37.kt
 PASS: tests/errors/lex_test29.kt
 PASS: tests/errors/syn4.kt
@@ -124,51 +66,18 @@ PASS: tests/errors/lex_test9.kt
 PASS: tests/errors/lex_test2.kt
 PASS: tests/errors/lex_test35.kt
 PASS: tests/errors/lex_test34.kt
-FAIL: tests/errors/sem2.kt
-Expected Error, but got:
-Processing file: tests/errors/sem2.kt
-DEBUG: Entering node: topLevelObjectList (prod: 101) at line 7, scope: 0x55cc488151e0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 3, scope: 0x55cc488151e0
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'squared' has scope pointer: 0x55cc48814eb0
-DEBUG: Entering node: squared (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x55cc48814eb0
-DEBUG: Entering node: functionValueParameter (prod: 110) at line 1, scope: 0x55cc48814eb0
-DEBUG: Entering node: x (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Entering node: type (prod: 102) at line 1, scope: 0x55cc48814eb0
-DEBUG: Entering node: Int (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Entering node: type (prod: 102) at line 1, scope: 0x55cc48814eb0
-DEBUG: Entering node: Int (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Entering node: block (prod: 111) at line 3, scope: 0x55cc48814eb0
-DEBUG: Entering node: multiplicative_expression (prod: 118) at line 3, scope: 0x55cc48814eb0
-DEBUG: Resolved Identifier 'x' to type int, mutable=0, nullable=0
-DEBUG: Entering node: Identifier (prod: 396) at line 2, scope: 0x55cc48814eb0
-DEBUG: Entering node: x (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Resolved Identifier 'x' to type int, mutable=0, nullable=0
-DEBUG: Entering node: Identifier (prod: 396) at line 3, scope: 0x55cc48814eb0
-DEBUG: Entering node: x (prod: 396) at line 0, scope: 0x55cc48814eb0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 7, scope: 0x55cc488151e0
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x55cc488151e0
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x55cc488151e0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 5, scope: 0x55cc488151e0
-DEBUG: Entering node: block (prod: 111) at line 7, scope: 0x55cc488151e0
-DEBUG: Entering node: functionCall (prod: 122) at line 7, scope: 0x55cc488151e0
-DEBUG: Entering node: squared (prod: 396) at line 0, scope: 0x55cc488151e0
-DEBUG: Entering node: expressionList (prod: 117) at line 6, scope: 0x55cc488151e0
-DEBUG: Entering node: expressionList (prod: 116) at line 6, scope: 0x55cc488151e0
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 6, scope: 0x55cc488151e0
-DEBUG: Entering node: 2 (prod: 389) at line 0, scope: 0x55cc488151e0
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 6, scope: 0x55cc488151e0
-DEBUG: Entering node: 3 (prod: 389) at line 0, scope: 0x55cc488151e0
-No errors
-
+PASS: tests/errors/sem2.kt
 PASS: tests/errors/lex_test38.kt
 PASS: tests/errors/lex_test10.kt
 PASS: tests/errors/lex_test41.kt
 PASS: tests/errors/lex_test15.kt
 PASS: tests/errors/lex_test5.kt
-PASS: tests/k0/syn6.kt
+FAIL: tests/k0/syn6.kt
+Expected No Error, but got:
+Semantic Error at line 0: Undefined function
+
+Parsing completed with 1 semantic error(s)
+
 FAIL: tests/k0/syn1.kt
 Expected No Error, but got:
 
@@ -180,10 +89,9 @@ Hint: Check for missing semicolons, brackets, or incorrect token ordering
 
 FAIL: tests/k0/syn_hellowrld.kt
 Expected No Error, but got:
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 10: Type mismatch in assignment: cannot assign value of type int to variable of type none
+Semantic Error at line 0: Undefined function
 
-Parsing completed with 2 semantic error(s)
+Parsing completed with 1 semantic error(s)
 
 FAIL: tests/k0/sem1.kt
 Expected No Error, but got:
@@ -197,39 +105,56 @@ Hint: Check for missing semicolons, brackets, or incorrect token ordering
 PASS: tests/k0/syn_multiply.kt
 FAIL: tests/k0/lex_test1.kt
 Expected No Error, but got:
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 39: Invalid operands for comparison operator
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
 Semantic Error at line 101: Type mismatch in declaration: cannot assign value of type none to variable of type string
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
 Semantic Error at line 111: Type mismatch in declaration: cannot assign value of type none to variable of type int
 Semantic Error at line 113: Type mismatch in declaration: cannot assign value of type none to variable of type int
 Semantic Error at line 118: Invalid operands for addition/subtraction
 Semantic Error at line 119: Type mismatch in declaration: cannot assign value of type float to variable of type int
 
-Parsing completed with 5 semantic error(s)
+Parsing completed with 18 semantic error(s)
 
 FAIL: tests/k0/sem_test1.kt
 Expected No Error, but got:
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 10: Type mismatch in assignment: cannot assign value of type int to variable of type none
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 15: Type mismatch in assignment: cannot assign value of type int to variable of type none
-
-Parsing completed with 4 semantic error(s)
-
-FAIL: tests/k0/syn_while.kt
-Expected No Error, but got:
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 5: Type mismatch in assignment: cannot assign value of type int to variable of type none
-
-Parsing completed with 2 semantic error(s)
-
-FAIL: tests/k0/syn_test1.kt
-Expected No Error, but got:
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 14: Type mismatch in assignment: cannot assign value of type int to variable of type none
-Semantic Error at line 0: Assignment to immutable variable
-Semantic Error at line 32: Type mismatch in assignment: cannot assign value of type int to variable of type none
-Semantic Error at line 51: Invalid operands for addition/subtraction
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
 
 Parsing completed with 5 semantic error(s)
+
+PASS: tests/k0/syn_while.kt
+FAIL: tests/k0/syn_test1.kt
+Expected No Error, but got:
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+Semantic Error at line 51: Invalid operands for addition/subtraction
+Semantic Error at line 0: Undefined function
+Semantic Error at line 0: Undefined function
+
+Parsing completed with 14 semantic error(s)
 
 PASS: tests/kotlin/syn7.kt
 PASS: tests/kotlin/lex_test42.kt
@@ -272,38 +197,7 @@ PASS: tests/kotlin/lex_test37.kt
 PASS: tests/kotlin/lex_test29.kt
 PASS: tests/kotlin/syn4.kt
 PASS: tests/kotlin/lex_test33.kt
-FAIL: tests/kotlin/syn5.kt
-Expected Error, but got:
-Processing file: tests/kotlin/syn5.kt
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x55df3c086580
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x55df3c086580
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x55df3c086580
-DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x55df3c086580
-DEBUG: Entering node: statements (prod: 112) at line 5, scope: 0x55df3c086580
-DEBUG: Entering node: assignment (prod: 280) at line 3, scope: 0x55df3c086580
-DEBUG: Propagated declaration info: identifier 'a' gets type int, mutable=0, nullable=0
-DEBUG: Entering node: variableDeclaration (prod: 329) at line 3, scope: 0x55df3c086580
-DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: type (prod: 102) at line 2, scope: 0x55df3c086580
-DEBUG: Entering node: Int (prod: 396) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 2, scope: 0x55df3c086580
-DEBUG: Entering node: 5 (prod: 389) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: ifStatement (prod: 340) at line 5, scope: 0x55df3c086580
-DEBUG: Entering node: comparison (prod: 298) at line 3, scope: 0x55df3c086580
-DEBUG: Resolved Identifier 'a' to type int, mutable=0, nullable=0
-DEBUG: Entering node: Identifier (prod: 396) at line 3, scope: 0x55df3c086580
-DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 3, scope: 0x55df3c086580
-DEBUG: Entering node: 6 (prod: 389) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: functionCall (prod: 122) at line 5, scope: 0x55df3c086580
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x55df3c086580
-DEBUG: Entering node: expressionList (prod: 116) at line 4, scope: 0x55df3c086580
-DEBUG: Entering node: StringLiteral (prod: 395) at line 4, scope: 0x55df3c086580
-DEBUG: Entering node: "less" (prod: 395) at line 0, scope: 0x55df3c086580
-No errors
-
+PASS: tests/kotlin/syn5.kt
 PASS: tests/kotlin/lex_test16.kt
 PASS: tests/kotlin/lex_test52.kt
 PASS: tests/kotlin/lex_test6.kt
@@ -326,40 +220,7 @@ PASS: tests/kotlin/lex_test9.kt
 PASS: tests/kotlin/lex_test2.kt
 PASS: tests/kotlin/lex_test35.kt
 PASS: tests/kotlin/lex_test34.kt
-FAIL: tests/kotlin/sem2.kt
-Expected Error, but got:
-Processing file: tests/kotlin/sem2.kt
-DEBUG: Entering node: topLevelObjectList (prod: 101) at line 9, scope: 0x559d8355f7a0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 6, scope: 0x559d8355f7a0
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'fun1' has scope pointer: 0x559d8355f220
-DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x559d8355f220
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x559d8355f220
-DEBUG: Entering node: block (prod: 111) at line 6, scope: 0x559d8355f220
-DEBUG: Entering node: statements (prod: 112) at line 6, scope: 0x559d8355f220
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x559d8355f220
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'fun2' has scope pointer: 0x559d8355f4e0
-DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x559d8355f4e0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x559d8355f4e0
-DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x559d8355f4e0
-DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x559d8355f4e0
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x559d8355f4e0
-DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x559d8355f4e0
-DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x559d8355f4e0
-DEBUG: Entering node: "nested function" (prod: 395) at line 0, scope: 0x559d8355f4e0
-DEBUG: Entering node: functionCall (prod: 122) at line 6, scope: 0x559d8355f220
-DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x559d8355f220
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 9, scope: 0x559d8355f7a0
-DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x559d8355f7a0
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x559d8355f7a0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 7, scope: 0x559d8355f7a0
-DEBUG: Entering node: block (prod: 111) at line 9, scope: 0x559d8355f7a0
-DEBUG: Entering node: functionCall (prod: 122) at line 9, scope: 0x559d8355f7a0
-DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x559d8355f7a0
-No errors
-
+PASS: tests/kotlin/sem2.kt
 PASS: tests/kotlin/lex_test38.kt
 PASS: tests/kotlin/lex_test10.kt
 PASS: tests/kotlin/lex_test41.kt
@@ -368,5 +229,5 @@ PASS: tests/kotlin/lex_test5.kt
 
 === TEST SUMMARY ===
 Total Tests: 153
-Passed: 140
-Failed: 13
+Passed: 146
+Failed: 7

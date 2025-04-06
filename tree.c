@@ -58,6 +58,33 @@ char *get_type_name(struct tree *type_node) {
     return "unknown";
 }
 
+void computeFunctionParameters(struct tree *fvp, int *count, typeptr **types) {
+    *count = 0;
+    *types = NULL;
+    if (!fvp || fvp->nkids < 1 || !fvp->kids[0])
+        return;
+    struct tree *plist = fvp->kids[0];
+    if (strcmp(plist->symbolname, "functionValueParameter") == 0) {
+         *count = 1;
+         *types = malloc(sizeof(typeptr));
+         if (!(*types)) {
+             fprintf(stderr, "Memory allocation failed in computeFunctionParameters\n");
+             exit(1);
+         }
+         (*types)[0] = plist->type; // Assume the parameter node’s type was already set.
+    } else if (strcmp(plist->symbolname, "functionParameterList") == 0) {
+         *count = plist->nkids;
+         *types = malloc(plist->nkids * sizeof(typeptr));
+         if (!(*types)) {
+             fprintf(stderr, "Memory allocation failed in computeFunctionParameters\n");
+             exit(1);
+         }
+         for (int i = 0; i < plist->nkids; i++) {
+             (*types)[i] = plist->kids[i]->type;
+         }
+    }
+}
+
 FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
     if (!t) return NULL;
 
@@ -70,34 +97,62 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         char *func_name = NULL;
         char *return_type = "Unit"; 
 
-        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
-            func_name = t->kids[0]->leaf->text;
-        }
+    if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+        func_name = t->kids[0]->leaf->text;
+    }
 
-        if (t->nkids >= 3) {
-            return_type = get_type_name(t->kids[2]);
-        }
+    if (t->nkids >= 3 && t->kids[2] != NULL) {
+        return_type = get_type_name(t->kids[2]);
+    }
 
-        if (func_name) {
-            insert_symbol(st, func_name, FUNCTION, typeptr_name(return_type), 0, 0);
-            //printf("Created function scope for: %s\n", func_name);
-
-            current_scope = create_function_scope(st, func_name);
-            t->scope = current_scope;
-            
-            FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
-            if (new_node) {
-                new_node->symtab = current_scope;
-                new_node->next = NULL;
-                
-                if (func_list_tail) {
-                    func_list_tail->next = new_node;
-                    func_list_tail = new_node;
-                } else {
-                    func_list_head = func_list_tail = new_node;
-                }
-            }
+    if (func_name) {
+        // Insert the function symbol with a placeholder type (NULL for now).
+        insert_symbol(st, func_name, FUNCTION, NULL, 0, 0);
+    
+        // Compute the function's parameter information from the functionValueParameters subtree.
+        int paramCount = 0;
+        typeptr *paramTypes = NULL;
+        // t->kids[1] is the functionValueParameters node.
+        computeFunctionParameters(t->kids[1], &paramCount, &paramTypes);
+    
+        // Use the already-set return_type variable.
+        typeptr retType = typeptr_name(return_type);
+    
+        // Create a new function type.
+        typeptr func_type = alctype(FUNC_TYPE);
+        func_type->u.f.returntype = retType;
+        func_type->u.f.nparams = paramCount;
+    
+        // Lookup the inserted function and update its entry with the parameter info and function type.
+        SymbolTableEntry func_entry = lookup_symbol(st, func_name);
+        if (func_entry) {
+             func_entry->param_count = paramCount;
+             func_entry->param_types = paramTypes;
+             func_entry->type = func_type;
+             // Debug output:
+             printf("DEBUG: Function '%s' recorded with %d parameter(s), return type: %s\n",
+                    func_name, paramCount, typename(func_type->u.f.returntype));
+             for (int i = 0; i < paramCount; i++) {
+                 printf("DEBUG: Parameter %d has type %s\n", i, typename(paramTypes[i]));
+             }
         }
+    
+        // Create a new function scope.
+        current_scope = create_function_scope(st, func_name);
+        t->scope = current_scope;
+    
+        FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
+        if (new_node) {
+             new_node->symtab = current_scope;
+             new_node->next = NULL;
+             if (func_list_tail) {
+                  func_list_tail->next = new_node;
+                  func_list_tail = new_node;
+             } else {
+                  func_list_head = func_list_tail = new_node;
+             }
+        }
+    }
 
         if (t->nkids >= 2 && t->kids[1]) {
             struct tree *params_container = t->kids[1];  
