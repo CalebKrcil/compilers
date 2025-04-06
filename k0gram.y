@@ -33,7 +33,7 @@
 %token <treeptr> BooleanLiteral NullLiteral StringLiteral Identifier
 %token <treeptr> HexLiteral BinLiteral
 
-%type <treeptr> program topLevelObject topLevelObjectList declaration 
+%type <treeptr> program topLevelObject topLevelObjectList declaration globalVariableDeclaration
 %type <treeptr> propertyDeclaration type functionDeclaration functionValueParameters
 %type <treeptr> functionParameterList_opt functionValueParameter functionBody
 %type <treeptr> block statements statement loopStatement forStatement whileStatement
@@ -85,12 +85,17 @@ topLevelObjectList:
 
 topLevelObject:
     declaration { $$ = $1; }
+    | globalVariableDeclaration { $$ = $1; }
     ;
 
 declaration:
     functionDeclaration { $$ = $1; }
     | propertyDeclaration { $$ = $1; }
     | typeAlias { $$ = $1; }
+    ;
+
+globalVariableDeclaration:
+    variableDeclaration {$$ =$1;}
     ;
 
 propertyDeclaration:
