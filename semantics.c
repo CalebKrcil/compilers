@@ -46,120 +46,91 @@ int is_null_literal(struct tree *t) {
     return (t->leaf->category == NullLiteral);
 }
 
-/* Check control conditions for if, while, and for statements.
-   Adjust child indexes as needed by your AST structure.
-*/
-void check_control_conditions(struct tree *t) {
+void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
         return;
+    
+    // Print basic info for the current node.
+    printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
+           t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
 
-    /* For if and if-else statements, assume the condition is the first child */
+    // If this node is a function declaration (prod 327) and has an attached scope, update current_scope.
+    if (t->prodrule == 327 && t->scope != NULL) {
+        printf("DEBUG: Function declaration encountered. Updating current scope.\n");
+        if (t->kids[0] && t->kids[0]->leaf)
+            printf("DEBUG: Function '%s' has scope pointer: %p\n", t->kids[0]->leaf->text, t->scope);
+        current_scope = t->scope;
+    }
+    
+    // Recursively process all children first.
+    for (int i = 0; i < t->nkids; i++) {
+        check_semantics_helper(t->kids[i], current_scope);
+    }
+    
+    // --- Control Structures ---
     if (t->symbolname &&
        (strcmp(t->symbolname, "ifStatement") == 0 ||
-        strcmp(t->symbolname, "ifElseStatement") == 0)) {
-        if (t->nkids < 1 || t->kids[0] == NULL) {
-            report_semantic_error("If-statement missing condition", t->lineno);
+        strcmp(t->symbolname, "ifElseStatement") == 0 ||
+        strcmp(t->symbolname, "whileStatement") == 0 ||
+        strcmp(t->symbolname, "forStatement") == 0)) {
+        
+        struct tree *cond = NULL;
+        if (strcmp(t->symbolname, "forStatement") == 0) {
+            // For for-statements, assume the condition is the second child.
+            if (t->nkids >= 2)
+                cond = t->kids[1];
         } else {
-            struct tree *cond = t->kids[0];
-            // Only resolve if the condition node is an Identifier
-            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
-                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
+            // For if and while, assume the condition is the first child.
+            cond = t->kids[0];
+        }
+        if (cond && strcmp(cond->symbolname, "Identifier") == 0 && !cond->type) {
+            // Try to obtain the identifier text. Sometimes the Identifier node itself is not a leaf.
+            char *idText = NULL;
+            if (cond->leaf && cond->leaf->text) {
+                idText = cond->leaf->text;
+            } else if (cond->nkids > 0 && cond->kids[0] && cond->kids[0]->leaf && cond->kids[0]->leaf->text) {
+                idText = cond->kids[0]->leaf->text;
+            }
+            if (idText) {
+                printf("DEBUG: Attempting to resolve identifier '%s' in control structure condition.\n", idText);
+                SymbolTableEntry entry = lookup_symbol(current_scope, idText);
                 if (entry && entry->type) {
                     cond->type = entry->type;
-                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
-                           cond->leaf->text, typename(entry->type));
+                    printf("DEBUG: Resolved '%s' to type %s\n", idText, typename(entry->type));
                 } else {
-                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
+                    printf("DEBUG: Lookup failed for identifier '%s' in scope %p\n", idText, current_scope);
                 }
-            }
-            if (!cond->type) {
-                report_semantic_error("If-statement condition has no type", cond->lineno);
-            } else if (cond->type->basetype != BOOL_TYPE) {
-                report_semantic_error("If-statement condition must be boolean", cond->lineno);
+            } else {
+                printf("DEBUG: Could not retrieve identifier text from node '%s'\n", cond->symbolname);
             }
         }
-    }
-
-    /* For while-statements, assume condition is the first child */
-    if (t->symbolname && strcmp(t->symbolname, "whileStatement") == 0) {
-        if (t->nkids < 1 || t->kids[0] == NULL) {
-            report_semantic_error("While-statement missing condition", t->lineno);
-        } else {
-            struct tree *cond = t->kids[0];
-            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
-                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
-                if (entry && entry->type) {
-                    cond->type = entry->type;
-                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
-                           cond->leaf->text, typename(entry->type));
-                } else {
-                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
-                }
-            }
-            if (!cond->type) {
-                report_semantic_error("While-statement condition has no type", cond->lineno);
-            } else if (cond->type->basetype != BOOL_TYPE) {
-                report_semantic_error("While-statement condition must be boolean", cond->lineno);
-            }
+        if (!cond || !cond->type) {
+            report_semantic_error("Control structure condition has no type", t->lineno);
+        } else if (cond->type->basetype != BOOL_TYPE) {
+            report_semantic_error("Control structure condition must be boolean", cond->lineno);
         }
     }
-
-    /* For for-statements (the boolean condition alternative), assume condition is child[1] */
-    if (t->symbolname && strcmp(t->symbolname, "forStatement") == 0) {
-        if (t->nkids < 2 || t->kids[1] == NULL) {
-            report_semantic_error("For-statement missing condition", t->lineno);
-        } else {
-            struct tree *cond = t->kids[1];
-            if (strcmp(cond->symbolname, "Identifier") == 0 && !cond->type && cond->leaf && cond->leaf->text) {
-                SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, cond->leaf->text);
-                if (entry && entry->type) {
-                    cond->type = entry->type;
-                    printf("DEBUG: Resolved identifier '%s' to type %s\n",
-                           cond->leaf->text, typename(entry->type));
-                } else {
-                    printf("DEBUG: Lookup failed for identifier '%s'\n", cond->leaf->text);
-                }
-            }
-            if (!cond->type) {
-                report_semantic_error("For-statement condition has no type", cond->lineno);
-            } else if (cond->type->basetype != BOOL_TYPE) {
-                report_semantic_error("For-statement condition must be boolean", cond->lineno);
-            }
-        }
-    }
-}
-
-
-
-
-
-
-
-void check_semantics(struct tree *t) {
-    if (!t)
-        return;
-
-    /* --- Check variable declarations with initializers --- */
+    
+    // --- Variable Declarations with Initializers ---
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids == 3) {
-        // Expected children: [0]: identifier, [1]: type node, [2]: initializer
         struct tree *declTypeNode = t->kids[1];
         struct tree *initializer = t->kids[2];
         if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
             char errMsg[256];
             snprintf(errMsg, sizeof(errMsg),
-                "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
-                (initializer->type ? typename(initializer->type) : "none"),
-                (declTypeNode->type ? typename(declTypeNode->type) : "none"));
+                     "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
+                     (initializer->type ? typename(initializer->type) : "none"),
+                     (declTypeNode->type ? typename(declTypeNode->type) : "none"));
             report_semantic_error(errMsg, initializer->lineno);
         }
     }
-
-    /* --- Check assignment nodes (re-assignments) --- */
+    
+    // --- Assignment Checks ---
     if (t->symbolname && strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
         struct tree *lhs = t->kids[0];
         struct tree *rhs = t->kids[1];
-
-        /* If lhs is not from a variableDeclaration initializer, enforce mutability */
+        
+        /* If lhs is not directly a variableDeclaration node, enforce immutability */
         if (!(lhs->symbolname && strcmp(lhs->symbolname, "variableDeclaration") == 0)) {
             if (!lhs->is_mutable) {
                 report_semantic_error("Assignment to immutable variable", lhs->lineno);
@@ -171,14 +142,14 @@ void check_semantics(struct tree *t) {
         if (!check_type_compatibility(lhs->type, rhs->type)) {
             char errMsg[256];
             snprintf(errMsg, sizeof(errMsg),
-                "Type mismatch in assignment: cannot assign value of type %s to variable of type %s",
-                (rhs->type ? typename(rhs->type) : "none"),
-                (lhs->type ? typename(lhs->type) : "none"));
+                     "Type mismatch in assignment: cannot assign value of type %s to variable of type %s",
+                     (rhs->type ? typename(rhs->type) : "none"),
+                     (lhs->type ? typename(lhs->type) : "none"));
             report_semantic_error(errMsg, rhs->lineno);
         }
     }
-
-    /* --- Check binary operators --- */
+    
+    // --- Binary Operators ---
     if (is_operator(t->prodrule)) {
         if (t->nkids >= 2) {
             if (!check_type_compatibility(t->kids[0]->type, t->kids[1]->type)) {
@@ -186,8 +157,8 @@ void check_semantics(struct tree *t) {
             }
         }
     }
-
-    /* --- Check function call nodes (prod: 122) --- */
+    
+    // --- Function Calls (production 122) ---
     if (t->prodrule == 122) {
         SymbolTableEntry func_entry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
         if (func_entry) {
@@ -203,12 +174,32 @@ void check_semantics(struct tree *t) {
             }
         }
     }
-
-    /* --- Check control structure conditions --- */
-    check_control_conditions(t);
-
-    /* Recursively check all children */
-    for (int i = 0; i < t->nkids; i++) {
-        check_semantics(t->kids[i]);
+    
+    // --- Unresolved Identifier Resolution ---
+    // If this node is a leaf identifier and its type is not set, attempt resolution.
+    if (!t->type && (t->leaf && t->leaf->category == Identifier)) {
+        char *idText = t->leaf->text;
+        if (!idText && t->nkids > 0 && t->kids[0] && t->kids[0]->leaf) {
+            idText = t->kids[0]->leaf->text;
+        }
+        if (idText) {
+            SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+            if (entry && entry->type) {
+                t->type = entry->type;
+                printf("DEBUG: Resolved leaf identifier '%s' to type %s\n", idText, typename(entry->type));
+            } else {
+                report_semantic_error("Undeclared identifier", t->lineno);
+            }
+        }
     }
+}
+
+
+
+void check_semantics(struct tree *t) {
+    // Start semantic checking from the package or global scope.
+    // You may choose to pass in globalSymtab, packageSymtab, or currentFunctionSymtab,
+    // depending on how your symbol tables are organized.
+    SymbolTable starting_scope = currentFunctionSymtab;
+    check_semantics_helper(t, starting_scope);
 }

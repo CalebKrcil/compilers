@@ -83,6 +83,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             //printf("Created function scope for: %s\n", func_name);
 
             current_scope = create_function_scope(st, func_name);
+            t->scope = current_scope;
             
             FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
             if (new_node) {
@@ -196,25 +197,29 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
     }
 
-    else if (t->prodrule == 329 || t->prodrule == 330) { 
+    else if (strcmp(t->symbolname, "variableDeclaration") == 0 ||
+         strcmp(t->symbolname, "constVariableDeclaration") == 0) {
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             char *var_name = t->kids[0]->leaf->text;
-            char *var_type = "unknown";
-            
-            if (t->nkids >= 2) {
+            /* Use the type already set on the node, if available */
+            typeptr var_type = t->type;
+            /* Otherwise, search the children for a type node */
+            if (!var_type) {
                 for (int i = 1; i < t->nkids; i++) {
                     if (t->kids[i] && strcmp(t->kids[i]->symbolname, "type") == 0) {
-                        var_type = get_type_name(t->kids[i]);
+                        var_type = typeptr_name(get_type_name(t->kids[i]));
                         break;
                     }
                 }
             }
-
-            // printf("Inserting variable: %s of type %s into %s\n",
-                    // var_name, var_type, current_scope->scope_name);
-            insert_symbol(current_scope, var_name, VARIABLE, typeptr_name(var_type), t->is_mutable, t->is_nullable);
+            /* If still missing, default to Any */
+            if (!var_type) {
+                var_type = typeptr_name("Any");
+            }
+            insert_symbol(current_scope, var_name, VARIABLE, var_type, t->is_mutable, t->is_nullable);
         }
     }
+
 
     else if (t->prodrule == 280) {  
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
@@ -279,6 +284,7 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     t->is_mutable = 0;
     t->is_nullable = 0;
     t->lineno = yylineno;
+    t->scope = NULL;
 
     va_list args;
     va_start(args, nkids);

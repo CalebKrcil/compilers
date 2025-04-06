@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include "symtab.h"
 
 struct sym_table;
 typedef struct sym_table *SymbolTable;
@@ -34,6 +35,7 @@ struct tree {
     int is_mutable;
     int is_nullable;
     int lineno;
+    SymbolTable scope;
 };
 
 typedef struct func_symtab_list {
