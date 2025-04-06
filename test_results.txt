@@ -9,23 +9,23 @@ Expected Error, but got:
 Processing file: tests/errors/syn8.kt
 DEBUG: Function 'outer' recorded with 0 parameter(s), return type: any
 DEBUG: Function 'inner' recorded with 0 parameter(s), return type: any
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x563717a77ed0
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x55bd1259eed0
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'outer' has scope pointer: 0x563717a77bd0
-DEBUG: Entering node: outer (prod: 396) at line 0, scope: 0x563717a77bd0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x563717a77bd0
-DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x563717a77bd0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x563717a77bd0
+DEBUG: Function 'outer' has scope pointer: 0x55bd1259ebd0
+DEBUG: Entering node: outer (prod: 396) at line 0, scope: 0x55bd1259ebd0
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x55bd1259ebd0
+DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x55bd1259ebd0
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x55bd1259ebd0
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'inner' has scope pointer: 0x563717a77ed0
-DEBUG: Entering node: inner (prod: 396) at line 0, scope: 0x563717a77ed0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x563717a77ed0
-DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x563717a77ed0
-DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x563717a77ed0
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x563717a77ed0
-DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x563717a77ed0
-DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x563717a77ed0
-DEBUG: Entering node: "Nested function" (prod: 395) at line 0, scope: 0x563717a77ed0
+DEBUG: Function 'inner' has scope pointer: 0x55bd1259eed0
+DEBUG: Entering node: inner (prod: 396) at line 0, scope: 0x55bd1259eed0
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x55bd1259eed0
+DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x55bd1259eed0
+DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x55bd1259eed0
+DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x55bd1259eed0
+DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x55bd1259eed0
+DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x55bd1259eed0
+DEBUG: Entering node: "Nested function" (prod: 395) at line 0, scope: 0x55bd1259eed0
 DEBUG: Checking function call for 'println' at line 0
 DEBUG: Function 'println' expects 1 parameter(s), call has 1 argument(s).
 No errors
@@ -149,11 +149,12 @@ Parsing completed with 1 semantic error(s)
 FAIL: tests/k0/sem_test3.kt
 Expected No Error, but got:
 Semantic Error at line 3: Array access on a non-array type
+Semantic Error at line 3: Assignment to element of immutable array
 Semantic Error at line 3: Assignment to immutable variable
 Semantic Error at line 3: Type mismatch in assignment: cannot assign value of type int to variable of type none
 Semantic Error at line 4: Array access on a non-array type
 
-Parsing completed with 4 semantic error(s)
+Parsing completed with 5 semantic error(s)
 
 PASS: tests/k0/syn_while.kt
 PASS: tests/k0/syn_test1.kt
@@ -202,34 +203,34 @@ FAIL: tests/kotlin/syn5.kt
 Expected Error, but got:
 Processing file: tests/kotlin/syn5.kt
 DEBUG: Function 'main' recorded with 0 parameter(s), return type: any
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x55a130d5b640
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 5, scope: 0x55c57bc1a640
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x55a130d5b640
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x55a130d5b640
-DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x55a130d5b640
-DEBUG: Entering node: statements (prod: 112) at line 5, scope: 0x55a130d5b640
-DEBUG: Entering node: assignment (prod: 280) at line 3, scope: 0x55a130d5b640
+DEBUG: Function 'main' has scope pointer: 0x55c57bc1a640
+DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x55c57bc1a640
+DEBUG: Entering node: block (prod: 111) at line 5, scope: 0x55c57bc1a640
+DEBUG: Entering node: statements (prod: 112) at line 5, scope: 0x55c57bc1a640
+DEBUG: Entering node: assignment (prod: 280) at line 3, scope: 0x55c57bc1a640
 DEBUG: Propagated declaration info: identifier 'a' gets type int, mutable=0, nullable=0
-DEBUG: Entering node: variableDeclaration (prod: 329) at line 3, scope: 0x55a130d5b640
-DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: type (prod: 102) at line 2, scope: 0x55a130d5b640
-DEBUG: Entering node: Int (prod: 396) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 2, scope: 0x55a130d5b640
-DEBUG: Entering node: 5 (prod: 389) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: ifStatement (prod: 340) at line 5, scope: 0x55a130d5b640
-DEBUG: Entering node: comparison (prod: 298) at line 3, scope: 0x55a130d5b640
+DEBUG: Entering node: variableDeclaration (prod: 329) at line 3, scope: 0x55c57bc1a640
+DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: type (prod: 102) at line 2, scope: 0x55c57bc1a640
+DEBUG: Entering node: Int (prod: 396) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: IntegerLiteral (prod: 389) at line 2, scope: 0x55c57bc1a640
+DEBUG: Entering node: 5 (prod: 389) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: ifStatement (prod: 340) at line 5, scope: 0x55c57bc1a640
+DEBUG: Entering node: comparison (prod: 298) at line 3, scope: 0x55c57bc1a640
 DEBUG: Resolved Identifier 'a' to type int, mutable=0, nullable=0
-DEBUG: Entering node: Identifier (prod: 396) at line 3, scope: 0x55a130d5b640
-DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: IntegerLiteral (prod: 389) at line 3, scope: 0x55a130d5b640
-DEBUG: Entering node: 6 (prod: 389) at line 0, scope: 0x55a130d5b640
+DEBUG: Entering node: Identifier (prod: 396) at line 3, scope: 0x55c57bc1a640
+DEBUG: Entering node: a (prod: 396) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: IntegerLiteral (prod: 389) at line 3, scope: 0x55c57bc1a640
+DEBUG: Entering node: 6 (prod: 389) at line 0, scope: 0x55c57bc1a640
 DEBUG: In comparison operator at line 3. Left type: int, Right type: int
-DEBUG: Entering node: functionCall (prod: 122) at line 5, scope: 0x55a130d5b640
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x55a130d5b640
-DEBUG: Entering node: expressionList (prod: 116) at line 4, scope: 0x55a130d5b640
-DEBUG: Entering node: StringLiteral (prod: 395) at line 4, scope: 0x55a130d5b640
-DEBUG: Entering node: "less" (prod: 395) at line 0, scope: 0x55a130d5b640
+DEBUG: Entering node: functionCall (prod: 122) at line 5, scope: 0x55c57bc1a640
+DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x55c57bc1a640
+DEBUG: Entering node: expressionList (prod: 116) at line 4, scope: 0x55c57bc1a640
+DEBUG: Entering node: StringLiteral (prod: 395) at line 4, scope: 0x55c57bc1a640
+DEBUG: Entering node: "less" (prod: 395) at line 0, scope: 0x55c57bc1a640
 DEBUG: Checking function call for 'println' at line 0
 DEBUG: Function 'println' expects 1 parameter(s), call has 1 argument(s).
 No errors
@@ -262,39 +263,39 @@ Processing file: tests/kotlin/sem2.kt
 DEBUG: Function 'fun1' recorded with 0 parameter(s), return type: any
 DEBUG: Function 'fun2' recorded with 0 parameter(s), return type: any
 DEBUG: Function 'main' recorded with 0 parameter(s), return type: any
-DEBUG: Entering node: topLevelObjectList (prod: 101) at line 9, scope: 0x563ba8d678e0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 6, scope: 0x563ba8d678e0
+DEBUG: Entering node: topLevelObjectList (prod: 101) at line 9, scope: 0x5603d999a8e0
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 6, scope: 0x5603d999a8e0
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'fun1' has scope pointer: 0x563ba8d672e0
-DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x563ba8d672e0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x563ba8d672e0
-DEBUG: Entering node: block (prod: 111) at line 6, scope: 0x563ba8d672e0
-DEBUG: Entering node: statements (prod: 112) at line 6, scope: 0x563ba8d672e0
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x563ba8d672e0
+DEBUG: Function 'fun1' has scope pointer: 0x5603d999a2e0
+DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x5603d999a2e0
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 1, scope: 0x5603d999a2e0
+DEBUG: Entering node: block (prod: 111) at line 6, scope: 0x5603d999a2e0
+DEBUG: Entering node: statements (prod: 112) at line 6, scope: 0x5603d999a2e0
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 4, scope: 0x5603d999a2e0
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'fun2' has scope pointer: 0x563ba8d675e0
-DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x563ba8d675e0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x563ba8d675e0
-DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x563ba8d675e0
-DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x563ba8d675e0
-DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x563ba8d675e0
-DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x563ba8d675e0
-DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x563ba8d675e0
-DEBUG: Entering node: "nested function" (prod: 395) at line 0, scope: 0x563ba8d675e0
+DEBUG: Function 'fun2' has scope pointer: 0x5603d999a5e0
+DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x5603d999a5e0
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 2, scope: 0x5603d999a5e0
+DEBUG: Entering node: block (prod: 111) at line 4, scope: 0x5603d999a5e0
+DEBUG: Entering node: functionCall (prod: 122) at line 4, scope: 0x5603d999a5e0
+DEBUG: Entering node: println (prod: 396) at line 0, scope: 0x5603d999a5e0
+DEBUG: Entering node: expressionList (prod: 116) at line 3, scope: 0x5603d999a5e0
+DEBUG: Entering node: StringLiteral (prod: 395) at line 3, scope: 0x5603d999a5e0
+DEBUG: Entering node: "nested function" (prod: 395) at line 0, scope: 0x5603d999a5e0
 DEBUG: Checking function call for 'println' at line 0
 DEBUG: Function 'println' expects 1 parameter(s), call has 1 argument(s).
-DEBUG: Entering node: functionCall (prod: 122) at line 6, scope: 0x563ba8d672e0
-DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x563ba8d672e0
+DEBUG: Entering node: functionCall (prod: 122) at line 6, scope: 0x5603d999a2e0
+DEBUG: Entering node: fun2 (prod: 396) at line 0, scope: 0x5603d999a2e0
 DEBUG: Checking function call for 'fun2' at line 0
 DEBUG: Function 'fun2' expects 0 parameter(s), call has 0 argument(s).
-DEBUG: Entering node: functionDeclaration (prod: 327) at line 9, scope: 0x563ba8d678e0
+DEBUG: Entering node: functionDeclaration (prod: 327) at line 9, scope: 0x5603d999a8e0
 DEBUG: Function declaration encountered. Updating current scope.
-DEBUG: Function 'main' has scope pointer: 0x563ba8d678e0
-DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x563ba8d678e0
-DEBUG: Entering node: functionValueParameters (prod: 108) at line 7, scope: 0x563ba8d678e0
-DEBUG: Entering node: block (prod: 111) at line 9, scope: 0x563ba8d678e0
-DEBUG: Entering node: functionCall (prod: 122) at line 9, scope: 0x563ba8d678e0
-DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x563ba8d678e0
+DEBUG: Function 'main' has scope pointer: 0x5603d999a8e0
+DEBUG: Entering node: main (prod: 396) at line 0, scope: 0x5603d999a8e0
+DEBUG: Entering node: functionValueParameters (prod: 108) at line 7, scope: 0x5603d999a8e0
+DEBUG: Entering node: block (prod: 111) at line 9, scope: 0x5603d999a8e0
+DEBUG: Entering node: functionCall (prod: 122) at line 9, scope: 0x5603d999a8e0
+DEBUG: Entering node: fun1 (prod: 396) at line 0, scope: 0x5603d999a8e0
 DEBUG: Checking function call for 'fun1' at line 0
 DEBUG: Function 'fun1' expects 0 parameter(s), call has 0 argument(s).
 No errors

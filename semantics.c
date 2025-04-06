@@ -208,10 +208,35 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (t->symbolname && strcmp(t->symbolname, "arrayAccess") == 0) {
         // t->kids[0] should be the expression for the array (e.g. data)
         // t->kids[1] is the index.
+        
+        // Force resolve the array identifier if it's not resolved yet
+        if (t->kids[0]->symbolname && strcmp(t->kids[0]->symbolname, "Identifier") == 0 && !t->kids[0]->type) {
+            char *idText = (t->kids[0]->leaf && t->kids[0]->leaf->text) ? t->kids[0]->leaf->text : NULL;
+            if (idText) {
+                SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+                if (entry && entry->type) {
+                    t->kids[0]->type = entry->type;
+                    t->kids[0]->is_mutable = entry->mutable;
+                    t->kids[0]->is_nullable = entry->nullable;
+                    printf("DEBUG: (Array access) Resolved array identifier '%s' to type %s, mutable=%d\n", 
+                          idText, typename(entry->type), entry->mutable);
+                }
+            }
+        }
+        
+        // Check the index expression - it should be of integer type
+        if (t->kids[1] && !check_type_compatibility(t->kids[1]->type, integer_typeptr)) {
+            report_semantic_error("Array index must be of integer type", t->kids[1]->lineno);
+        }
+        
         if (t->kids[0]->type && t->kids[0]->type->basetype == ARRAY_TYPE) {
-            // Set the array access node’s type to the element type.
+            // Set the array access node's type to the element type.
             t->type = t->kids[0]->type->u.a.elemtype;
-            printf("DEBUG: Array access resolved: element type is %s\n", typename(t->type));
+            // Mark the array access as mutable if the array itself is mutable
+            t->is_mutable = t->kids[0]->is_mutable;
+            t->is_nullable = t->kids[0]->is_nullable;
+            printf("DEBUG: Array access resolved: element type is %s, mutable=%d\n", 
+                  typename(t->type), t->is_mutable);
         } else {
             report_semantic_error("Array access on a non-array type", t->lineno);
             t->type = null_typeptr;
@@ -284,7 +309,42 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                        lhs->type->basetype, typename(lhs->type));
             }
         }
-    
+        
+        if (lhs->symbolname && strcmp(lhs->symbolname, "arrayAccess") == 0) {
+            struct tree *arrayVar = lhs->kids[0];
+            
+            // Force-resolve the array identifier if needed
+            if (arrayVar->symbolname && strcmp(arrayVar->symbolname, "Identifier") == 0 && !arrayVar->type) {
+                char *idText = (arrayVar->leaf && arrayVar->leaf->text) ? arrayVar->leaf->text : NULL;
+                if (idText) {
+                    SymbolTableEntry entry = lookup_symbol(current_scope, idText);
+                    if (entry && entry->type) {
+                        arrayVar->type = entry->type;
+                        arrayVar->is_mutable = entry->mutable;
+                        arrayVar->is_nullable = entry->nullable;
+                        printf("DEBUG: (Assignment) Resolved array identifier '%s' to type %s, mutable=%d\n", 
+                              idText, typename(entry->type), entry->mutable);
+                        
+                        // Update the array access node's properties
+                        if (arrayVar->type->basetype == ARRAY_TYPE) {
+                            lhs->type = arrayVar->type->u.a.elemtype;
+                            lhs->is_mutable = arrayVar->is_mutable;
+                            printf("DEBUG: Updated array access element type to %s, mutable=%d\n", 
+                                  typename(lhs->type), lhs->is_mutable);
+                        }
+                    }
+                }
+            }
+            
+            printf("DEBUG: Array assignment: array var mutable=%d\n", arrayVar->is_mutable);
+            if (!arrayVar->is_mutable) {
+                report_semantic_error("Assignment to element of immutable array", lhs->lineno);
+            }
+            
+            // Pass the mutability from the array to its elements
+            lhs->is_mutable = arrayVar->is_mutable;
+        }
+
         printf("DEBUG: Final LHS state: token='%s', mutable=%d, type pointer=%p, basetype=%d (%s), lineno=%d\n",
                (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : "unknown",
                lhs->is_mutable,

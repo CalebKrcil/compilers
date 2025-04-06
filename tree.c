@@ -252,17 +252,24 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
     }
 
+    
     else if (strcmp(t->symbolname, "variableDeclaration") == 0 ||
-         strcmp(t->symbolname, "constVariableDeclaration") == 0) {
+         strcmp(t->symbolname, "constVariableDeclaration") == 0 ||
+         strcmp(t->symbolname, "arrayDeclaration") == 0) {  // Add this line
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             char *var_name = t->kids[0]->leaf->text;
             /* Use the type already set on the node, if available */
             typeptr var_type = t->type;
             /* Otherwise, search the children for a type node */
             if (!var_type) {
+                // Try to find a genericType node for arrays
                 for (int i = 1; i < t->nkids; i++) {
                     if (t->kids[i] && strcmp(t->kids[i]->symbolname, "type") == 0) {
                         var_type = typeptr_name(get_type_name(t->kids[i]));
+                        break;
+                    } else if (t->kids[i] && strcmp(t->kids[i]->symbolname, "genericType") == 0) {
+                        // Handle array type differently - we already have the type set on the node itself
+                        var_type = t->kids[i]->type;
                         break;
                     }
                 }
