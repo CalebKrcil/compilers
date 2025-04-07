@@ -197,7 +197,8 @@ statements:
 
 statement:
     expression nl_opt { $$ = $1; }
-    | declaration nl_opt { $$ = $1; }
+    | propertyDeclaration { $$ = $1; }
+    | typeAlias { $$ = $1; }
     | assignment nl_opt { $$ = $1; }
     | loopStatement nl_opt { $$ = $1; }
     | ifStatement nl_opt { $$ = $1; }
