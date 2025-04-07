@@ -282,6 +282,14 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
     }
 
+    else if (strcmp(t->symbolname, "arrayAssignmentDeclaration") == 0) {
+        char *var_name = t->kids[0]->leaf->text;      // $2 = variable name
+        typeptr var_type = t->type;                   // already set during parse
+        int is_mutable = t->is_mutable;
+        int is_nullable = t->is_nullable;
+    
+        insert_symbol(current_scope, var_name, VARIABLE, var_type, is_mutable, is_nullable);
+    }
 
     else if (t->prodrule == 280) {  
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {

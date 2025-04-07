@@ -61,6 +61,69 @@ void flattenExpressionList(struct tree *exprList, struct tree ***args, int *coun
     }
 }
 
+char *resolve_qualified_name(struct tree *t) {
+    if (!t)
+        return NULL;
+
+    char *result = NULL;
+    if (t->symbolname) {
+        fprintf(stderr, "DEBUG: Resolving node with symbolname: %s\n", t->symbolname);
+    }
+
+    // If the node is a functionCall, use its first child.
+    if (t->symbolname && strcmp(t->symbolname, "functionCall") == 0) {
+        if (t->nkids > 0) {
+            result = resolve_qualified_name(t->kids[0]);
+            fprintf(stderr, "DEBUG: functionCall node resolved to: %s\n", result);
+            return result;
+        }
+    }
+
+    // If the node is a leaf, return its text.
+    if (t->leaf) {
+        result = strdup(t->leaf->text);
+        fprintf(stderr, "DEBUG: Leaf node resolved to: %s\n", result);
+        return result;
+    }
+
+    // If this is a qualifiedName node, iterate over all children.
+    if (t->symbolname && strcmp(t->symbolname, "qualifiedName") == 0) {
+        int first = 1;
+        for (int i = 0; i < t->nkids; i++) {
+            char *part = resolve_qualified_name(t->kids[i]);
+            if (!part)
+                continue;
+            if (first) {
+                result = part;
+                first = 0;
+            } else {
+                int new_len = strlen(result) + strlen(part) + 2; // dot + null terminator
+                char *tmp = malloc(new_len);
+                if (!tmp) {
+                    free(result);
+                    free(part);
+                    return NULL;
+                }
+                sprintf(tmp, "%s.%s", result, part);
+                free(result);
+                free(part);
+                result = tmp;
+            }
+        }
+        fprintf(stderr, "DEBUG: qualifiedName node resolved to: %s\n", result);
+        return result;
+    }
+    
+    // Fallback: if none of the above, return a copy of symbolname.
+    if (t->symbolname) {
+        result = strdup(t->symbolname);
+        fprintf(stderr, "DEBUG: Fallback node resolved to: %s\n", result);
+        return result;
+    }
+    
+    return NULL;
+}
+
 int is_null_literal(struct tree *t) {
     if (!t || !t->leaf)
         return 0;
@@ -205,6 +268,25 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
+    if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 &&
+        t->nkids == 3 &&
+        t->kids[1] && t->kids[1]->type &&
+        t->kids[2]) {
+
+        typeptr declared = t->kids[1]->type;
+        struct tree *initializer = t->kids[2];
+
+        // Check if initializer is an array constructor-like expression
+        if (initializer->symbolname && strcmp(initializer->symbolname, "functionCall") == 0) {
+            struct tree *callee = initializer->kids[0]; // function name
+            if (callee && callee->leaf && strcmp(callee->leaf->text, "Array") == 0 &&
+                declared->basetype == ARRAY_TYPE) {
+                initializer->type = declared; // Propagate the declared array type to RHS
+                printf("DEBUG: Treating 'Array(...) { ... }' as array initializer\n");
+            }
+        }
+    }
+
     if (t->symbolname && strcmp(t->symbolname, "arrayAccess") == 0) {
         // t->kids[0] should be the expression for the array (e.g. data)
         // t->kids[1] is the index.
@@ -446,7 +528,12 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     
     // --- Function Call Checks (production 122) ---
     if (t->prodrule == 122) {
-        char *funcName = t->kids[0]->leaf->text;
+        char *funcName = resolve_qualified_name(t->kids[0]);
+        if (!funcName && t->kids[0] && t->kids[0]->leaf) {
+            funcName = strdup(t->kids[0]->leaf->text);
+        }
+        fprintf(stderr, "DEBUG: Resolved function name: %s\n", funcName);
+
         printf("DEBUG: Checking function call for '%s' at line %d\n", funcName, t->kids[0]->lineno);
         // Use current_scope so that functions declared in package or global scope are found.
         SymbolTableEntry func_entry = lookup_symbol(current_scope, funcName);
