@@ -130,10 +130,10 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
              func_entry->param_types = paramTypes;
              func_entry->type = func_type;
              // Debug output:
-            //  printf("DEBUG: Function '%s' recorded with %d parameter(s), return type: %s\n",
-            //         func_name, paramCount, typename(func_type->u.f.returntype));
+            printf("DEBUG: Function '%s' recorded with %d parameter(s), return type: %s\n",
+                    func_name, paramCount, typename(func_type->u.f.returntype));
              for (int i = 0; i < paramCount; i++) {
-                 //printf("DEBUG: Parameter %d has type %s\n", i, typename(paramTypes[i]));
+                printf("DEBUG: Parameter %d has type %s\n", i, typename(paramTypes[i]));
              }
         }
     
