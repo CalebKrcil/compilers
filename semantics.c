@@ -21,6 +21,9 @@ int check_type_compatibility(typeptr expected, typeptr actual) {
     if (!expected || !actual)
         return 0;
     
+    if (actual == null_typeptr) {
+        return 1; 
+    }
     // If either type is "any", they are automatically compatible.
     if (expected->basetype == ANY_TYPE || actual->basetype == ANY_TYPE)
         return 1;
@@ -276,13 +279,14 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             }
             // allow assignment, skip further compatibility check
         }
-    else if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
-        char errMsg[256];
-        snprintf(errMsg, sizeof(errMsg),
-                "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
-                (initializer->type ? typename(initializer->type) : "none"),
-                (declTypeNode->type ? typename(declTypeNode->type) : "none"));
-        report_semantic_error(errMsg, initializer->lineno);
+        else if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
+            char errMsg[256];
+            snprintf(errMsg, sizeof(errMsg),
+                     "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
+                     (initializer->type ? typename(initializer->type) : "none"),
+                     (declTypeNode->type ? typename(declTypeNode->type) : "none"));
+            report_semantic_error(errMsg, initializer->lineno);
+        }
     }
     
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 &&
