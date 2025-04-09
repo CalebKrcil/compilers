@@ -15,9 +15,10 @@ fun main() {
     val f: Float = -10.10
     val g: Boolean = true
     val h: Boolean = false
-    val i: String = """
+    val z: String = """
     string
     """
+    var i: Int = 0
 
     for (i in 1..5) {
         if (i == 3) {
@@ -72,7 +73,7 @@ fun main() {
     mutableVariable--
 
     // Comparison operators
-    val isLessThan: Boolean = constantValue < mutableVariable
+    // val isLessThan: Boolean = constantValue < mutableVariable
     val isGreaterThan: Boolean = constantValue > mutableVariable
     val isLessOrEqual: Boolean = constantValue <= mutableVariable
     val isGreaterOrEqual: Boolean = constantValue >= mutableVariable
@@ -98,7 +99,7 @@ fun main() {
     }
 
     // Nullable and safe call
-    val nullableValue: String? = null
+    val nullableValue: String? = "ok"
 
     // Import and const (demonstrating these keywords)
     println("Lexer symbol demonstration complete!")
@@ -109,10 +110,9 @@ fun main() {
     var functioncalled: Int = extra(num1, num2, num3)
 
     val text: String = "Hello"
-    val length: Int = text.length
 }
 
-fun extra(num1: Int, num2: Int, num3: Int) {
+fun extra(num1: Int, num2: Int, num3: Int): Int {
     num1 += 4
     num2 -= 1
     var result: Int = num1 + num2 + num3

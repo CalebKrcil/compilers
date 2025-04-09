@@ -525,10 +525,6 @@ primary_expression:
          /* Type may be resolved later via symbol table lookup */
          $$->type = NULL;
     }
-    | Identifier DOT primary_expression { 
-         $$ = alctree(121, "qualifiedName", 2, $1, $3); 
-         $$->type = $3->type;
-    }
     | primary_expression LSQUARE expression RSQUARE { 
          $$ = alctree(300, "arrayAccess", 2, $1, $3); 
          $$->type = null_typeptr;

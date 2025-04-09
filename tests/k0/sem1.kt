@@ -22,9 +22,6 @@ fun average(x: Int, y: Int): Double {
     return avg
 }
 
-fun tagMessage(name: String, tag: Int): String {
-    return name + "#" + tag.toString()
-}
 
 fun main(args: Array<String>) {
    val constPi: Double = 3.14
@@ -43,41 +40,32 @@ fun main(args: Array<String>) {
    val result: Double = average(a, b)
    println(result)
 
-   val msg: String = tagMessage("Player", 42)
-   println(msg)
-
    val status: Boolean = isReady && (b > a)
    if (status) {
       println("Ready and valid")
    }
 
    // Arrays and indexing
-//    var data: Array<Int>(4) { 0 }
-//    data[0] = 9
-//    data[1] = 8
-//    data[2] = data[0] + data[1]
-//    println(data[2])
+   var data: Array<Int>(4) { 0 }
+   data[0] = 9
+   data[1] = 8
+   data[2] = data[0] + data[1]
+   println(data[2])
 
-//    // Boolean logic and comparisons
-//    if (data[2] > 10 && status) {
-//       println("Check passed")
-//    }
+   // Boolean logic and comparisons
+   if (data[2] > 10 && status) {
+      println("Check passed")
+   }
 
    // for loop with range
    for (i in 1..3) {
-      println("Loop index: " + i.toString())
+      println("Loop index: ")
    }
 
    // Function with no return type
    logMessage("This is a log.")
 
-   // Using nullable operations
-   println("Safe length: " + safeLength.toString())
-   println("Forced length: " + forcedLength.toString())
-
    // Use of math and random from standard library
-   val rand = java.util.Random()
-   println(rand.nextInt())
    println(java.lang.Math.abs(-10))
    println(java.lang.Math.max(3, 7))
    println(java.lang.Math.min(3, 7))

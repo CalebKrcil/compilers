@@ -27,7 +27,7 @@ int multiline_start_line = 0;
 
 WS        [ \t\f]
 NEWLINE   \r\n|\n|\r
-ID        [a-zA-Z_][a-zA-Z0-9_]*
+ID        [a-zA-Z_][a-zA-Z0-9_.]*
 NUMBER    -?[0-9]+
 FLOAT     -?[0-9]+\.[0-9]+([eE][-+]?[0-9]+)?
 HEX       0[xX][0-9a-fA-F]+
@@ -164,7 +164,6 @@ SHEBANG   ^#!*
 "||"          { update_last_token("||"); return alctoken(DISJ, yytext); }
 "!"{WS}+      { update_last_token("! "); return alctoken(EXCL_WS, yytext); }
 "!"           { update_last_token("!"); return alctoken(EXCL_NO_WS, yytext); }
-"."           { update_last_token("."); return alctoken(DOT, yytext); }
 "?"           { update_last_token("?"); return alctoken(QUEST_NO_WS, yytext); }
 ".."          { update_last_token(".."); return alctoken(RANGE, yytext); }
 "..<"         { update_last_token("..<"); return alctoken(RANGE_UNTIL, yytext); }
