@@ -269,14 +269,20 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids == 3) {
         struct tree *declTypeNode = t->kids[1];
         struct tree *initializer = t->kids[2];
-        if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
-            char errMsg[256];
-            snprintf(errMsg, sizeof(errMsg),
-                     "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
-                     (initializer->type ? typename(initializer->type) : "none"),
-                     (declTypeNode->type ? typename(declTypeNode->type) : "none"));
-            report_semantic_error(errMsg, initializer->lineno);
+        
+        if (is_null_literal(initializer)) {
+            if (!t->is_nullable) {
+                report_semantic_error("Assignment of null to non-nullable variable", initializer->lineno);
+            }
+            // allow assignment, skip further compatibility check
         }
+    else if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
+        char errMsg[256];
+        snprintf(errMsg, sizeof(errMsg),
+                "Type mismatch in declaration: cannot assign value of type %s to variable of type %s",
+                (initializer->type ? typename(initializer->type) : "none"),
+                (declTypeNode->type ? typename(declTypeNode->type) : "none"));
+        report_semantic_error(errMsg, initializer->lineno);
     }
     
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 &&
