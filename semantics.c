@@ -508,7 +508,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         else if (prod == 118 || prod == 119 || prod == 120) {
             if (check_type_compatibility(left, integer_typeptr) &&
                 check_type_compatibility(right, integer_typeptr)) {
-                t->type = double_typeptr;
+                t->type = integer_typeptr;
             }
             else if ((check_type_compatibility(left, integer_typeptr) || check_type_compatibility(left, double_typeptr)) &&
                      (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr))) {
