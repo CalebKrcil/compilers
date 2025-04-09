@@ -58,31 +58,55 @@ char *get_type_name(struct tree *type_node) {
     return "unknown";
 }
 
+void flattenParameterList(struct tree *node, struct tree ***params, int *count) {
+    if (!node)
+        return;
+    if (node->symbolname) {
+        if (strcmp(node->symbolname, "functionValueParameter") == 0) {
+            *params = realloc(*params, ((*count) + 1) * sizeof(struct tree *));
+            if (!(*params)) {
+                fprintf(stderr, "Memory allocation failed in flattenParameterList\n");
+                exit(1);
+            }
+            (*params)[*count] = node;
+            (*count)++;
+            return;
+        } else if (strcmp(node->symbolname, "functionParameterList") == 0 ||
+                   strcmp(node->symbolname, "functionValueParameters") == 0) {
+            for (int i = 0; i < node->nkids; i++) {
+                flattenParameterList(node->kids[i], params, count);
+            }
+            return;
+        }
+    }
+    // If the node is none of the above, check its children.
+    for (int i = 0; i < node->nkids; i++) {
+        flattenParameterList(node->kids[i], params, count);
+    }
+}
+
 void computeFunctionParameters(struct tree *fvp, int *count, typeptr **types) {
     *count = 0;
     *types = NULL;
-    if (!fvp || fvp->nkids < 1 || !fvp->kids[0])
-        return;
+    if (!fvp || fvp->nkids < 1)
+         return;
+    // fvp->kids[0] is the parameter list produced by functionValueParameters.
     struct tree *plist = fvp->kids[0];
-    if (strcmp(plist->symbolname, "functionValueParameter") == 0) {
-         *count = 1;
-         *types = malloc(sizeof(typeptr));
+    struct tree **flat_params = NULL;
+    int flat_count = 0;
+    flattenParameterList(plist, &flat_params, &flat_count);
+    if (flat_count > 0) {
+         *count = flat_count;
+         *types = malloc(flat_count * sizeof(typeptr));
          if (!(*types)) {
              fprintf(stderr, "Memory allocation failed in computeFunctionParameters\n");
              exit(1);
          }
-         (*types)[0] = plist->type; // Assume the parameter node’s type was already set.
-    } else if (strcmp(plist->symbolname, "functionParameterList") == 0) {
-         *count = plist->nkids;
-         *types = malloc(plist->nkids * sizeof(typeptr));
-         if (!(*types)) {
-             fprintf(stderr, "Memory allocation failed in computeFunctionParameters\n");
-             exit(1);
-         }
-         for (int i = 0; i < plist->nkids; i++) {
-             (*types)[i] = plist->kids[i]->type;
+         for (int i = 0; i < flat_count; i++) {
+              (*types)[i] = flat_params[i]->type;  // use the type already stored on the parameter node
          }
     }
+    free(flat_params);
 }
 
 FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
@@ -97,212 +121,131 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         char *func_name = NULL;
         char *return_type = "Unit"; 
 
-    if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
-        func_name = t->kids[0]->leaf->text;
-    }
-
-    if (t->nkids >= 3 && t->kids[2] != NULL) {
-        return_type = get_type_name(t->kids[2]);
-    }
-
-    if (func_name) {
-        // Insert the function symbol with a placeholder type (NULL for now).
-        insert_symbol(st, func_name, FUNCTION, NULL, 0, 0);
-    
-        // Compute the function's parameter information from the functionValueParameters subtree.
-        int paramCount = 0;
-        typeptr *paramTypes = NULL;
-        // t->kids[1] is the functionValueParameters node.
-        computeFunctionParameters(t->kids[1], &paramCount, &paramTypes);
-    
-        // Use the already-set return_type variable.
-        typeptr retType = typeptr_name(return_type);
-    
-        // Create a new function type.
-        typeptr func_type = alctype(FUNC_TYPE);
-        func_type->u.f.returntype = retType;
-        func_type->u.f.nparams = paramCount;
-    
-        // Lookup the inserted function and update its entry with the parameter info and function type.
-        SymbolTableEntry func_entry = lookup_symbol(st, func_name);
-        if (func_entry) {
-             func_entry->param_count = paramCount;
-             func_entry->param_types = paramTypes;
-             func_entry->type = func_type;
-             // Debug output:
-            // printf("DEBUG: Function '%s' recorded with %d parameter(s), return type: %s\n",
-            //         func_name, paramCount, typename(func_type->u.f.returntype));
-            //  for (int i = 0; i < paramCount; i++) {
-            //     printf("DEBUG: Parameter %d has type %s\n", i, typename(paramTypes[i]));
-            //  }
+        if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
+            func_name = t->kids[0]->leaf->text;
         }
-    
-        // Create a new function scope.
-        current_scope = create_function_scope(st, func_name);
-        t->scope = current_scope;
-    
-        FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
-        if (new_node) {
-             new_node->symtab = current_scope;
-             new_node->next = NULL;
-             if (func_list_tail) {
-                  func_list_tail->next = new_node;
-                  func_list_tail = new_node;
-             } else {
-                  func_list_head = func_list_tail = new_node;
-             }
-        }
-    }
 
-        if (t->nkids >= 2 && t->kids[1]) {
-            struct tree *params_container = t->kids[1];  
-            if (strcmp(params_container->symbolname, "functionValueParameters") == 0) {
-                if (params_container->nkids > 0 && params_container->kids[0] &&
-                    strcmp(params_container->kids[0]->symbolname, "functionValueParameter") == 0) {
-                    
-                    struct tree *param_node = params_container->kids[0];
-                    if (param_node->nkids >= 2) {  
-                        char *param_name = NULL;
-                        if (param_node->kids[0] && param_node->kids[0]->leaf) {
-                            param_name = param_node->kids[0]->leaf->text;
-                        }
-                        
-                        char *param_type = "unknown";
-                        if (param_node->kids[1] && strcmp(param_node->kids[1]->symbolname, "type") == 0) {
-                            struct tree *type_node = param_node->kids[1];
-                            if (type_node->nkids > 0 && type_node->kids[0] && type_node->kids[0]->leaf) {
-                                param_type = type_node->kids[0]->leaf->text;
-                            } else if (type_node->leaf) {
-                                param_type = type_node->leaf->text;
-                            }
-                        }
-                        
-                        if (param_name) {
-                            // printf("Inserting single function parameter: %s of type %s into %s\n",
-                                // param_name, param_type, current_scope->scope_name);
-                            insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type), 0, param_node->kids[1]->is_nullable);
-                        }
-                    }
-                }
-                else if (params_container->nkids > 0 && params_container->kids[0] &&
-                        strcmp(params_container->kids[0]->symbolname, "functionParameterList") == 0) {
-                    
-                    struct tree *params_list = params_container->kids[0];
-                    
-                    for (int i = 0; i < params_list->nkids; i++) {
-                        struct tree *param_node = params_list->kids[i];
-                        if (!param_node) continue;
-                        
-                        if (strcmp(param_node->symbolname, "functionValueParameter") == 0) {
-                            if (param_node->nkids >= 2) {  
-                                char *param_name = NULL;
-                                if (param_node->kids[0] && param_node->kids[0]->leaf) {
-                                    param_name = param_node->kids[0]->leaf->text;
-                                }
-                                char *param_type = "unknown";
-                                if (param_node->kids[1] && strcmp(param_node->kids[1]->symbolname, "type") == 0) {
-                                    struct tree *type_node = param_node->kids[1];
-                                    if (type_node->nkids > 0 && type_node->kids[0] && type_node->kids[0]->leaf) {
-                                        param_type = type_node->kids[0]->leaf->text;
-                                    } else if (type_node->leaf) {
-                                        param_type = type_node->leaf->text;
-                                    }
-                                }
-                                if (param_name) {
-                                    // printf("Inserting multi function parameter: %s of type %s into %s\n",
-                                        // param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type),0, param_node->kids[1]->is_nullable);
-                                }
-                            }
-                        }
-                    }
-                }
-                else {
-                    for (int i = 0; i < params_container->nkids; i++) {
-                        struct tree *child = params_container->kids[i];
-                        if (!child) continue;
-                        
-                        if (strcmp(child->symbolname, "functionValueParameter") == 0) {
-                            if (child->nkids >= 2) {
-                                char *param_name = NULL;
-                                if (child->kids[0] && child->kids[0]->leaf) {
-                                    param_name = child->kids[0]->leaf->text;
-                                }
-                                
-                                char *param_type = "unknown";
-                                if (child->kids[1] && strcmp(child->kids[1]->symbolname, "type") == 0) {
-                                    struct tree *type_node = child->kids[1];
-                                    if (type_node->nkids > 0 && type_node->kids[0] && type_node->kids[0]->leaf) {
-                                        param_type = type_node->kids[0]->leaf->text;
-                                    } else if (type_node->leaf) {
-                                        param_type = type_node->leaf->text;
-                                    }
-                                }
-                                
-                                if (param_name) {
-                                    // printf("Inserting fallback function parameter: %s of type %s into %s\n",
-                                        // param_name, param_type, current_scope->scope_name);
-                                    insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type), 0, child->kids[1]->is_nullable);
-                                }
-                            }
-                        }
-                    }
+        if (t->nkids >= 3 && t->kids[2] != NULL) {
+            return_type = get_type_name(t->kids[2]);
+        }
+
+        if (func_name) {
+            // Insert the function symbol with a placeholder type (NULL for now).
+            insert_symbol(st, func_name, FUNCTION, NULL, 0, 0);
+    
+            // Compute the function's parameter information from the functionValueParameters subtree.
+            int paramCount = 0;
+            typeptr *paramTypes = NULL;
+            // t->kids[1] is the functionValueParameters node.
+            computeFunctionParameters(t->kids[1], &paramCount, &paramTypes);
+    
+            // Use the already-set return_type variable.
+            typeptr retType = typeptr_name(return_type);
+    
+            // Create a new function type.
+            typeptr func_type = alctype(FUNC_TYPE);
+            func_type->u.f.returntype = retType;
+            func_type->u.f.nparams = paramCount;
+    
+            // Lookup the inserted function and update its entry with the parameter info and function type.
+            SymbolTableEntry func_entry = lookup_symbol(st, func_name);
+            if (func_entry) {
+                func_entry->param_count = paramCount;
+                func_entry->param_types = paramTypes;
+                func_entry->type = func_type;
+            }
+    
+            // Create a new function scope.
+            current_scope = create_function_scope(st, func_name);
+            t->scope = current_scope;
+    
+            FuncSymbolTableList new_node = malloc(sizeof(struct func_symtab_list));
+            if (new_node) {
+                new_node->symtab = current_scope;
+                new_node->next = NULL;
+                if (func_list_tail) {
+                    func_list_tail->next = new_node;
+                    func_list_tail = new_node;
+                } else {
+                    func_list_head = func_list_tail = new_node;
                 }
             }
         }
+
+        // Flatten the parameters from the functionValueParameters subtree 
+        // and insert each parameter into the current function scope.
+        if (t->nkids >= 2 && t->kids[1]) {
+            struct tree *params_container = t->kids[1];
+            struct tree **flat_params = NULL;
+            int flat_count = 0;
+            flattenParameterList(params_container, &flat_params, &flat_count);
+            for (int i = 0; i < flat_count; i++) {
+                struct tree *param_node = flat_params[i];
+                if (param_node && param_node->nkids >= 2) {  
+                    char *param_name = NULL;
+                    if (param_node->kids[0] && param_node->kids[0]->leaf) {
+                        param_name = param_node->kids[0]->leaf->text;
+                    }
+                    
+                    char *param_type = "unknown";
+                    if (param_node->kids[1] && strcmp(param_node->kids[1]->symbolname, "type") == 0) {
+                        struct tree *type_node = param_node->kids[1];
+                        if (type_node->nkids > 0 && type_node->kids[0] && type_node->kids[0]->leaf)
+                            param_type = type_node->kids[0]->leaf->text;
+                        else if (type_node->leaf)
+                            param_type = type_node->leaf->text;
+                    }
+                    
+                    if (param_name) {
+                        insert_symbol(current_scope, param_name, VARIABLE, typeptr_name(param_type), 1, param_node->kids[1]->is_nullable);
+                    }
+                }
+            }
+            free(flat_params);
+        }
     }
 
-    
     else if (strcmp(t->symbolname, "variableDeclaration") == 0 ||
-         strcmp(t->symbolname, "constVariableDeclaration") == 0 ||
-         strcmp(t->symbolname, "arrayDeclaration") == 0) {  // Add this line
+             strcmp(t->symbolname, "constVariableDeclaration") == 0 ||
+             strcmp(t->symbolname, "arrayDeclaration") == 0) {
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             char *var_name = t->kids[0]->leaf->text;
             /* Use the type already set on the node, if available */
             typeptr var_type = t->type;
             /* Otherwise, search the children for a type node */
             if (!var_type) {
-                // Try to find a genericType node for arrays
                 for (int i = 1; i < t->nkids; i++) {
                     if (t->kids[i] && strcmp(t->kids[i]->symbolname, "type") == 0) {
                         var_type = typeptr_name(get_type_name(t->kids[i]));
                         break;
                     } else if (t->kids[i] && strcmp(t->kids[i]->symbolname, "genericType") == 0) {
-                        // Handle array type differently - we already have the type set on the node itself
                         var_type = t->kids[i]->type;
                         break;
                     }
                 }
             }
-            /* If still missing, default to Any */
             if (!var_type) {
                 var_type = typeptr_name("Any");
             }
             insert_symbol(current_scope, var_name, VARIABLE, var_type, t->is_mutable, t->is_nullable);
         }
     }
-
     else if (strcmp(t->symbolname, "arrayAssignmentDeclaration") == 0) {
-        char *var_name = t->kids[0]->leaf->text;      // $2 = variable name
-        typeptr var_type = t->type;                   // already set during parse
+        char *var_name = t->kids[0]->leaf->text;
+        typeptr var_type = t->type;
         int is_mutable = t->is_mutable;
         int is_nullable = t->is_nullable;
     
         insert_symbol(current_scope, var_name, VARIABLE, var_type, is_mutable, is_nullable);
     }
-
     else if (t->prodrule == 280) {  
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             char *var_name = t->kids[0]->leaf->text;
-
             if (!lookup_symbol_current_scope(current_scope, var_name)) {
-                // printf("Implicitly declaring variable: %s in %s\n",
-                        // var_name, current_scope->scope_name);
                 insert_symbol(current_scope, var_name, VARIABLE, alctype(ANY_TYPE), 1, 1);  
             }
         }
     }
-
     else if (t->leaf && t->leaf->category == Identifier) {
         if (t->prodrule != 329 && t->prodrule != 330 && t->prodrule != 327) {
             check_undeclared(current_scope, t->leaf->text);
@@ -315,6 +258,8 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
     
     return func_list_head;
 }
+
+
 
 void free_func_symtab_list(FuncSymbolTableList list) {
     while (list) {

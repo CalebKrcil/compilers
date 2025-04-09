@@ -1,7 +1,9 @@
+fun mathstuff(num1: Int, num2: Int, num3: Int, num4: Int): Int {
+    num1 = num2 + num3
+    return num1 + num2 + num3 + num4
+}
+
 fun main() {
-    println("wowzers")
-    println(java.lang.Math.abs(-10))
-    println(java.lang.Math.max(3.0, 7.0))
-    println(java.lang.Math.min(3.0, 7.0))
-    println(java.lang.Math.pow(2.0, 3.0))
+    println("test")
+    println(mathstuff(1, 2, 3, 4))
 }

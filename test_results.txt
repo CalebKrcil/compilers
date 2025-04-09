@@ -81,18 +81,11 @@ PASS: tests/k0/syn1.kt
 PASS: tests/k0/syn_hellowrld.kt
 PASS: tests/k0/sem1.kt
 PASS: tests/k0/syn_multiply.kt
-FAIL: tests/k0/lex_test1.kt
-Expected No Error, but got:
-Semantic Error at line 0: Function call argument count mismatch
-Semantic Error at line 110: Function call argument type mismatch for parameter 0: expected none, got int
-Semantic Error at line 110: Function call argument type mismatch for parameter 2: expected none, got int
-Semantic Error at line 118: Invalid operands for addition
-
-Parsing completed with 4 semantic error(s)
-
+PASS: tests/k0/lex_test1.kt
 PASS: tests/k0/sem_test1.kt
 PASS: tests/k0/sem_test2.kt
 PASS: tests/k0/sem_test4.kt
+PASS: tests/k0/syn5.kt
 PASS: tests/k0/sem_test3.kt
 PASS: tests/k0/syn_while.kt
 PASS: tests/k0/syn_test1.kt
@@ -137,11 +130,6 @@ PASS: tests/kotlin/lex_test37.kt
 PASS: tests/kotlin/lex_test29.kt
 PASS: tests/kotlin/syn4.kt
 PASS: tests/kotlin/lex_test33.kt
-FAIL: tests/kotlin/syn5.kt
-Expected Error, but got:
-Processing file: tests/kotlin/syn5.kt
-No errors
-
 PASS: tests/kotlin/lex_test16.kt
 PASS: tests/kotlin/lex_test52.kt
 PASS: tests/kotlin/lex_test6.kt
@@ -173,5 +161,5 @@ PASS: tests/kotlin/lex_test5.kt
 
 === TEST SUMMARY ===
 Total Tests: 160
-Passed: 158
-Failed: 2
+Passed: 160
+Failed: 0

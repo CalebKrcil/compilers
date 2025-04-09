@@ -1,5 +1,13 @@
 #!/usr/bin/env kotlin
 
+
+fun extra(num1: Int, num2: Int, num3: Int): Int {
+    num1 += 4
+    num2 -= 1
+    var result: Int = num1 + num2 + num3
+    return result
+}
+
 fun main() {
     // comment
     /*
@@ -110,11 +118,4 @@ fun main() {
     var functioncalled: Int = extra(num1, num2, num3)
 
     val text: String = "Hello"
-}
-
-fun extra(num1: Int, num2: Int, num3: Int): Int {
-    num1 += 4
-    num2 -= 1
-    var result: Int = num1 + num2 + num3
-    return result
 }
