@@ -107,7 +107,7 @@ fun main() {
     }
 
     // Nullable and safe call
-    val nullableValue: String? = "ok"
+    val nullableValue: String? = null
 
     // Import and const (demonstrating these keywords)
     println("Lexer symbol demonstration complete!")
