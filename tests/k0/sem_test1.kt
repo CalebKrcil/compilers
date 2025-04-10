@@ -17,5 +17,10 @@ fun play() {
 }
 
 fun main() {
-  play()
+   play()
+
+   val maybeInt: Int = 13
+   val alsoMaybe: String? = null
+   // val nonNullable: Int = null // ❌ should fail
+   // val notMaybe: Boolean = null // ❌ should fail
 }

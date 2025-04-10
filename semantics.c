@@ -20,10 +20,6 @@ void report_semantic_error(const char *msg, int lineno) {
 int check_type_compatibility(typeptr expected, typeptr actual) {
     if (!expected || !actual)
         return 0;
-    
-    if (actual == null_typeptr) {
-        return 1; 
-    }
     // If either type is "any", they are automatically compatible.
     if (expected->basetype == ANY_TYPE || actual->basetype == ANY_TYPE)
         return 1;
@@ -139,10 +135,16 @@ char *resolve_qualified_name(struct tree *t) {
 }
 
 int is_null_literal(struct tree *t) {
-    if (!t || !t->leaf)
-        return 0;
-    return (t->leaf->category == NullLiteral);
+    if (!t) return 0;
+    if (t->leaf && t->leaf->text && strcmp(t->leaf->text, "null") == 0)
+        return 1;
+    if (t->symbolname && strcmp(t->symbolname, "NullLiteral") == 0)
+        return 1;
+    return 0;
 }
+
+
+
 
 void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
@@ -274,9 +276,10 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         struct tree *initializer = t->kids[2];
         
         if (is_null_literal(initializer)) {
-            if (!t->is_nullable) {
+            if (!t->is_nullable) {  // Only check if the variable itself is nullable
                 report_semantic_error("Assignment of null to non-nullable variable", initializer->lineno);
             }
+            goto after_type_check;
             // allow assignment, skip further compatibility check
         }
         else if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
@@ -288,7 +291,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             report_semantic_error(errMsg, initializer->lineno);
         }
     }
-    
+    after_type_check:
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 &&
         t->nkids == 3 &&
         t->kids[1] && t->kids[1]->type &&
