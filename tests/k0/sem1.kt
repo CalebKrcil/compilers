@@ -31,7 +31,7 @@ fun main(args: Array<String>) {
    val byteVal: Byte = 127
    val shortVal: Short = 32000
    val longVal: Long = 10000000000
-   val floatVal: Float = 2.5f
+   val floatVal: Float = java.lang.Math.abs(-10)
    val doubleVal: Double = 6.28
    var a: Int = 1
    var b: Int = 5
