@@ -5,6 +5,7 @@ PASS: tests/errors/syn2.kt
 PASS: tests/errors/syn3.kt
 PASS: tests/errors/lex_test53.kt
 PASS: tests/errors/syn8.kt
+PASS: tests/errors/sem_testnull.kt
 PASS: tests/errors/lex_test39.kt
 PASS: tests/errors/sem7.kt
 PASS: tests/errors/syn_test2.kt
@@ -160,6 +161,6 @@ PASS: tests/kotlin/lex_test15.kt
 PASS: tests/kotlin/lex_test5.kt
 
 === TEST SUMMARY ===
-Total Tests: 160
-Passed: 160
+Total Tests: 161
+Passed: 161
 Failed: 0

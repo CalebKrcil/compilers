@@ -1,3 +1,4 @@
+# Existing definitions…
 CC = gcc
 LEX = flex
 YACC = bison
@@ -18,11 +19,18 @@ YACC_HEADER = k0gram.tab.h
 
 OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o type.o semantics.o
 
+#--- New definitions for Lab 9 ---
+LAB9_TARGET = lab9
+LAB9_SRC = lab9.c tac.c
+LAB9_OBJS = lab9.o tac.o
+
+# Default target remains as $(TARGET) for k0.
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) -lfl -lm
 
+# Build k0 lex and yacc files.
 $(LEX_OUT): $(LEX_SRC) $(YACC_HEADER)
 	$(LEX) -o $(LEX_OUT) $(LEX_SRC)
 
@@ -50,5 +58,16 @@ type.o: $(TYPE_SRC)
 semantics.o: $(SEMANTICS_SRC)
 	$(CC) $(CFLAGS) -c $(SEMANTICS_SRC)
 
+#--- New target for Lab 9 ---
+$(LAB9_TARGET): $(LAB9_OBJS)
+	$(CC) $(CFLAGS) -o $(LAB9_TARGET) $(LAB9_OBJS)
+
+lab9.o: lab9.c tac.h
+	$(CC) $(CFLAGS) -c lab9.c
+
+tac.o: tac.c tac.h
+	$(CC) $(CFLAGS) -c tac.c
+
+#--- Clean rule update ---
 clean:
-	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET)
+	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET) $(LAB9_OBJS) $(LAB9_TARGET)
