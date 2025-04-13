@@ -79,7 +79,6 @@ void flattenParameterList(struct tree *node, struct tree ***params, int *count) 
             return;
         }
     }
-    // If the node is none of the above, check its children.
     for (int i = 0; i < node->nkids; i++) {
         flattenParameterList(node->kids[i], params, count);
     }
@@ -90,7 +89,6 @@ void computeFunctionParameters(struct tree *fvp, int *count, typeptr **types) {
     *types = NULL;
     if (!fvp || fvp->nkids < 1)
          return;
-    // fvp->kids[0] is the parameter list produced by functionValueParameters.
     struct tree *plist = fvp->kids[0];
     struct tree **flat_params = NULL;
     int flat_count = 0;
@@ -103,7 +101,7 @@ void computeFunctionParameters(struct tree *fvp, int *count, typeptr **types) {
              exit(1);
          }
          for (int i = 0; i < flat_count; i++) {
-              (*types)[i] = flat_params[i]->type;  // use the type already stored on the parameter node
+              (*types)[i] = flat_params[i]->type;
          }
     }
     free(flat_params);
@@ -130,24 +128,18 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
         }
 
         if (func_name) {
-            // Insert the function symbol with a placeholder type (NULL for now).
             insert_symbol(st, func_name, FUNCTION, NULL, 0, 0);
     
-            // Compute the function's parameter information from the functionValueParameters subtree.
             int paramCount = 0;
             typeptr *paramTypes = NULL;
-            // t->kids[1] is the functionValueParameters node.
             computeFunctionParameters(t->kids[1], &paramCount, &paramTypes);
     
-            // Use the already-set return_type variable.
             typeptr retType = typeptr_name(return_type);
     
-            // Create a new function type.
             typeptr func_type = alctype(FUNC_TYPE);
             func_type->u.f.returntype = retType;
             func_type->u.f.nparams = paramCount;
     
-            // Lookup the inserted function and update its entry with the parameter info and function type.
             SymbolTableEntry func_entry = lookup_symbol(st, func_name);
             if (func_entry) {
                 func_entry->param_count = paramCount;
@@ -155,7 +147,6 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
                 func_entry->type = func_type;
             }
     
-            // Create a new function scope.
             current_scope = create_function_scope(st, func_name);
             t->scope = current_scope;
     
@@ -172,8 +163,6 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
             }
         }
 
-        // Flatten the parameters from the functionValueParameters subtree 
-        // and insert each parameter into the current function scope.
         if (t->nkids >= 2 && t->kids[1]) {
             struct tree *params_container = t->kids[1];
             struct tree **flat_params = NULL;
@@ -210,9 +199,7 @@ FuncSymbolTableList printsyms(struct tree *t, SymbolTable st) {
              strcmp(t->symbolname, "arrayDeclaration") == 0) {
         if (t->nkids >= 1 && t->kids[0] && t->kids[0]->leaf) {
             char *var_name = t->kids[0]->leaf->text;
-            /* Use the type already set on the node, if available */
             typeptr var_type = t->type;
-            /* Otherwise, search the children for a type node */
             if (!var_type) {
                 for (int i = 1; i < t->nkids; i++) {
                     if (t->kids[i] && strcmp(t->kids[i]->symbolname, "type") == 0) {
@@ -356,7 +343,6 @@ void printtree(struct tree *t, int depth) {
         printf(" type: %s", typename(t->type));
     }
 
-    // Always print these flags for clarity
     printf(" [mutable=%d nullable=%d]\n", t->is_mutable, t->is_nullable);
 
     for (int i = 0; i < t->nkids; i++) {

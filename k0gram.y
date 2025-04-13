@@ -121,9 +121,6 @@ type:
         $$ = alctree(104, "genericType", 2, $1, $3); 
         $$->is_nullable = 0;
         if (strcmp($1->leaf->text, "Array") == 0) {
-            /* Create an array type using the element type from $3.
-                You may use your alcarraytype function; here we assume
-                that the size will be determined later from the array initializer. */
             $$->type = alcarraytype($3, NULL);
             if ($3->type)
                 $$->type->u.a.elemtype = $3->type;
@@ -522,7 +519,6 @@ primary_expression:
     }
     | Identifier { 
          $$ = alctree(Identifier, "Identifier", 1, $1); 
-         /* Type may be resolved later via symbol table lookup */
          $$->type = NULL;
     }
     | primary_expression LSQUARE expression RSQUARE { 
@@ -536,7 +532,6 @@ primary_expression:
 functionCall:
     Identifier LPAREN functionCallArguments RPAREN nl_opt { 
          $$ = alctree(122, "functionCall", 2, $1, $3); 
-         /* Function call type will be set later during semantic analysis after symbol resolution */
          $$->type = NULL;
     }
     ;

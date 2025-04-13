@@ -4,9 +4,6 @@
 
 extern int error_count;
 
-/* Define the global current function symbol table.
-   This will be updated when a new function scope is created.
-*/
 SymbolTable currentFunctionSymtab = NULL;
 
 SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
@@ -132,7 +129,7 @@ void print_symbols(SymbolTable st) {
     }
 
     char **symbols = malloc(symbol_count * sizeof(char *));
-    char **info = malloc(symbol_count * sizeof(char *));  // now holds full info string
+    char **info = malloc(symbol_count * sizeof(char *));
 
     if (!symbols || !info) {
         fprintf(stderr, "Error: Memory allocation failed for symbol sorting\n");
@@ -159,7 +156,6 @@ void print_symbols(SymbolTable st) {
         }
     }
 
-    // Insertion sort
     for (int i = 1; i < symbol_count; i++) {
         char *key_sym = symbols[i];
         char *key_info = info[i];
@@ -175,7 +171,7 @@ void print_symbols(SymbolTable st) {
 
     for (int i = 0; i < symbol_count; i++) {
         printf("    %s : %s\n", symbols[i], info[i]);
-        free(info[i]);  // free each individual string
+        free(info[i]);
     }
 
     printf("---\n\n");
@@ -229,7 +225,6 @@ SymbolTable create_function_scope(SymbolTable parent, char *func_name) {
     if (st->scope_name) {
         sprintf(st->scope_name, "func %s", func_name);
     }
-    /* Set the global current function symbol table */
     currentFunctionSymtab = st;
     return st;
 }

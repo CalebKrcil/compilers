@@ -3,7 +3,7 @@
 #include <string.h>
 #include "semantics.h"
 #include "ytab.h"
-#include "type.h"  // for BOOL_TYPE and our base types
+#include "type.h"
 
 extern int error_count;
 extern SymbolTable globalSymtab;
@@ -14,9 +14,6 @@ void report_semantic_error(const char *msg, int lineno) {
     error_count++;
 }
 
-/* Check for exact type match by pointer or by comparing basetype values.
-   (Ensure that your type pointers for Int, Float/Double, Boolean, etc. are set up correctly.)
-*/
 int check_type_compatibility(typeptr expected, typeptr actual) {
     if (!expected || !actual)
         return 0;
@@ -107,7 +104,7 @@ char *resolve_qualified_name(struct tree *t) {
                 result = part;
                 first = 0;
             } else {
-                int new_len = strlen(result) + strlen(part) + 2; // dot + null terminator
+                int new_len = strlen(result) + strlen(part) + 2;
                 char *tmp = malloc(new_len);
                 if (!tmp) {
                     free(result);
@@ -143,16 +140,10 @@ int is_null_literal(struct tree *t) {
     return 0;
 }
 
-
-
-
 void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
         return;
-    
-    // --- Early Propagation for Declarations ---
-    // If this node is a variable or constant declaration, propagate its type
-    // and flags (mutability, nullability) to the identifier child.
+
     if (t->symbolname &&
        (strcmp(t->symbolname, "variableDeclaration") == 0 ||
         strcmp(t->symbolname, "constVariableDeclaration") == 0)) {
@@ -168,9 +159,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Immediate Resolution for Identifier Nodes ---
-    // If this node is produced by the "Identifier" rule and its type is not yet set,
-    // try to resolve it now from the current scope.
     if (t->symbolname && strcmp(t->symbolname, "Identifier") == 0 && !t->type) {
         char *idText = NULL;
         if (t->leaf && t->leaf->text)
@@ -189,7 +177,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Print Current Node ---
     // printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
     //        t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
     
@@ -218,7 +205,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         current_scope = loop_scope;
     }
 
-    // --- Function Declaration: Update Current Scope ---
     if (t->prodrule == 327 && t->scope != NULL) {
         // printf("DEBUG: Function declaration encountered. Updating current scope.\n");
         if (t->kids[0] && t->kids[0]->leaf)
@@ -226,12 +212,10 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         current_scope = t->scope;
     }
     
-    // --- Recurse into Children ---
     for (int i = 0; i < t->nkids; i++) {
         check_semantics_helper(t->kids[i], current_scope);
     }
     
-    // --- Control Structures ---
     if (t->symbolname &&
        (strcmp(t->symbolname, "ifStatement") == 0 ||
         strcmp(t->symbolname, "ifElseStatement") == 0 ||
@@ -270,17 +254,15 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Variable Declarations with Initializers ---
     if (t->symbolname && strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids == 3) {
         struct tree *declTypeNode = t->kids[1];
         struct tree *initializer = t->kids[2];
         
         if (is_null_literal(initializer)) {
-            if (!t->is_nullable) {  // Only check if the variable itself is nullable
+            if (!t->is_nullable) {
                 report_semantic_error("Assignment of null to non-nullable variable", initializer->lineno);
             }
             goto after_type_check;
-            // allow assignment, skip further compatibility check
         }
         else if (!check_type_compatibility(declTypeNode->type, initializer->type)) {
             char errMsg[256];
@@ -300,22 +282,17 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         typeptr declared = t->kids[1]->type;
         struct tree *initializer = t->kids[2];
 
-        // Check if initializer is an array constructor-like expression
         if (initializer->symbolname && strcmp(initializer->symbolname, "functionCall") == 0) {
-            struct tree *callee = initializer->kids[0]; // function name
+            struct tree *callee = initializer->kids[0];
             if (callee && callee->leaf && strcmp(callee->leaf->text, "Array") == 0 &&
                 declared->basetype == ARRAY_TYPE) {
-                initializer->type = declared; // Propagate the declared array type to RHS
+                initializer->type = declared;
                 // printf("DEBUG: Treating 'Array(...) { ... }' as array initializer\n");
             }
         }
     }
 
     if (t->symbolname && strcmp(t->symbolname, "arrayAccess") == 0) {
-        // t->kids[0] should be the expression for the array (e.g. data)
-        // t->kids[1] is the index.
-        
-        // Force resolve the array identifier if it's not resolved yet
         if (t->kids[0]->symbolname && strcmp(t->kids[0]->symbolname, "Identifier") == 0 && !t->kids[0]->type) {
             char *idText = (t->kids[0]->leaf && t->kids[0]->leaf->text) ? t->kids[0]->leaf->text : NULL;
             if (idText) {
@@ -329,16 +306,13 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 }
             }
         }
-        
-        // Check the index expression - it should be of integer type
+
         if (t->kids[1] && !check_type_compatibility(t->kids[1]->type, integer_typeptr)) {
             report_semantic_error("Array index must be of integer type", t->kids[1]->lineno);
         }
         
         if (t->kids[0]->type && t->kids[0]->type->basetype == ARRAY_TYPE) {
-            // Set the array access node's type to the element type.
             t->type = t->kids[0]->type->u.a.elemtype;
-            // Mark the array access as mutable if the array itself is mutable
             t->is_mutable = t->kids[0]->is_mutable;
             t->is_nullable = t->kids[0]->is_nullable;
             // printf("DEBUG: Array access resolved: element type is %s, mutable=%d\n", 
@@ -357,7 +331,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         //        (left ? typename(left) : "none"),
         //        (right ? typename(right) : "none"));
         
-        // Allow numeric comparisons or string comparisons.
         int leftIsNumeric = (check_type_compatibility(left, integer_typeptr) || check_type_compatibility(left, double_typeptr));
         int rightIsNumeric = (check_type_compatibility(right, integer_typeptr) || check_type_compatibility(right, double_typeptr));
         int bothString = (check_type_compatibility(left, string_typeptr) && check_type_compatibility(right, string_typeptr));
@@ -366,11 +339,9 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             report_semantic_error("Invalid operands for comparison operator", t->lineno);
         }
         
-        // The type of any comparison is boolean.
         t->type = boolean_typeptr;
     }
 
-    // --- Assignment Checks ---
     if (t->symbolname && strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
         struct tree *lhs = t->kids[0];
         struct tree *rhs = t->kids[1];
@@ -387,7 +358,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
         // printf("DEBUG: LHS mutable flag: %d\n", lhs->is_mutable);
     
-        // Force resolution if the type is NULL or has basetype NONE_TYPE.
         if (lhs->leaf) {
             if (lhs->type == NULL || lhs->type->basetype == NONE_TYPE) {
                 char *idText = lhs->leaf->text;
@@ -419,7 +389,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         if (lhs->symbolname && strcmp(lhs->symbolname, "arrayAccess") == 0) {
             struct tree *arrayVar = lhs->kids[0];
             
-            // Force-resolve the array identifier if needed
             if (arrayVar->symbolname && strcmp(arrayVar->symbolname, "Identifier") == 0 && !arrayVar->type) {
                 char *idText = (arrayVar->leaf && arrayVar->leaf->text) ? arrayVar->leaf->text : NULL;
                 if (idText) {
@@ -431,7 +400,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                         // printf("DEBUG: (Assignment) Resolved array identifier '%s' to type %s, mutable=%d\n", 
                         //      idText, typename(entry->type), entry->mutable);
                         
-                        // Update the array access node's properties
                         if (arrayVar->type->basetype == ARRAY_TYPE) {
                             lhs->type = arrayVar->type->u.a.elemtype;
                             lhs->is_mutable = arrayVar->is_mutable;
@@ -447,7 +415,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 report_semantic_error("Assignment to element of immutable array", lhs->lineno);
             }
             
-            // Pass the mutability from the array to its elements
             lhs->is_mutable = arrayVar->is_mutable;
         }
 
@@ -459,7 +426,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         //        lhs->type ? typename(lhs->type) : "none",
         //        lhs->lineno);
     
-        // Check for immutability.
         if (!(lhs->symbolname && (strcmp(lhs->symbolname, "variableDeclaration") == 0 ||
                                    strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
             if (!lhs->is_mutable) {
@@ -479,9 +445,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
 
-    // --- Binary Operator Type Checking ---
     if (is_operator(t->prodrule)) {
-        // Force-resolve left operand if it's an Identifier lacking a type.
         if (t->kids[0]->symbolname && strcmp(t->kids[0]->symbolname, "Identifier") == 0 && !t->kids[0]->type) {
             char *idText = (t->kids[0]->leaf && t->kids[0]->leaf->text) ? t->kids[0]->leaf->text : NULL;
             if (idText) {
@@ -492,7 +456,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 }
             }
         }
-        // Force-resolve right operand if it's an Identifier lacking a type.
         if (t->kids[1]->symbolname && strcmp(t->kids[1]->symbolname, "Identifier") == 0 && !t->kids[1]->type) {
             char *idText = (t->kids[1]->leaf && t->kids[1]->leaf->text) ? t->kids[1]->leaf->text : NULL;
             if (idText) {
@@ -508,11 +471,10 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         typeptr right = t->kids[1]->type;
         int prod = t->prodrule;
         
-        // For addition (prod 114) and subtraction (prod 115)
-        if (prod == 114) {  // addition operator
+        if (prod == 114 || prod == 115) {
             // If either operand is a string, treat the operation as string concatenation.
-            if (check_type_compatibility(left, string_typeptr) ||
-                check_type_compatibility(right, string_typeptr)) {
+            if (prod == 114 && (check_type_compatibility(left, string_typeptr) ||
+                check_type_compatibility(right, string_typeptr))) {
                 t->type = string_typeptr;
             }
             else if (check_type_compatibility(left, integer_typeptr) &&
@@ -528,7 +490,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 report_semantic_error("Invalid operands for addition", t->lineno);
             }
         }
-        // For multiplicative operators (prod 118, 119, 120)
         else if (prod == 118 || prod == 119 || prod == 120) {
             if (check_type_compatibility(left, integer_typeptr) &&
                 check_type_compatibility(right, integer_typeptr)) {
@@ -550,7 +511,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Function Call Checks (production 122) ---
     if (t->prodrule == 122) {
         char *funcName = resolve_qualified_name(t->kids[0]);
         if (!funcName && t->kids[0] && t->kids[0]->leaf) {
@@ -559,14 +519,12 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         // fprintf(stderr, "DEBUG: Resolved function name: %s\n", funcName);
 
         // printf("DEBUG: Checking function call for '%s' at line %d\n", funcName, t->kids[0]->lineno);
-        // Use current_scope so that functions declared in package or global scope are found.
         SymbolTableEntry func_entry = lookup_symbol(current_scope, funcName);
         
         if (!func_entry) {
             // printf("DEBUG: Undefined function '%s' in current scope chain starting at %p\n", funcName, current_scope);
             report_semantic_error("Undefined function", t->kids[0]->lineno);
         } else {
-            // Flatten the argument list.
             struct tree **args = NULL;
             int actual = 0;
             flattenExpressionList(t->kids[1], &args, &actual);
@@ -576,7 +534,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             if (func_entry->param_count != actual) {
                 report_semantic_error("Function call argument count mismatch", t->kids[0]->lineno);
             }
-            // Check that each argument's type is compatible with the expected parameter type.
             for (int i = 0; i < actual; i++) {
                 if (!check_type_compatibility(func_entry->param_types[i], args[i]->type)) {
                     char errMsg[256];
@@ -587,7 +544,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                     report_semantic_error(errMsg, args[i]->lineno);
                 }
             }
-            // Optionally, set the type of the function call node to the function's return type.
             if (func_entry->type && func_entry->type->u.f.returntype) {
                 t->type = func_entry->type->u.f.returntype;
             } else {
@@ -598,7 +554,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
     
-    // --- Unresolved Identifier Resolution ---
     if (!t->type && (t->leaf && t->leaf->category == Identifier)) {
         char *idText = t->leaf->text;
         if (!idText && t->nkids > 0 && t->kids[0] && t->kids[0]->leaf)
@@ -617,9 +572,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
 
 
 void check_semantics(struct tree *t) {
-    // Start semantic checking from the package or global scope.
-    // You may choose to pass in globalSymtab, packageSymtab, or currentFunctionSymtab,
-    // depending on how your symbol tables are organized.
     SymbolTable starting_scope = currentFunctionSymtab;
     check_semantics_helper(t, starting_scope);
 }

@@ -1,4 +1,3 @@
-# Existing definitions…
 CC = gcc
 LEX = flex
 YACC = bison
@@ -24,7 +23,6 @@ LAB9_TARGET = lab9
 LAB9_SRC = lab9.c tac.c
 LAB9_OBJS = lab9.o tac.o
 
-# Default target remains as $(TARGET) for k0.
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
@@ -68,6 +66,5 @@ lab9.o: lab9.c tac.h
 tac.o: tac.c tac.h
 	$(CC) $(CFLAGS) -c tac.c
 
-#--- Clean rule update ---
 clean:
 	rm -f $(OBJS) $(LEX_OUT) $(YACC_OUT) $(YACC_HEADER) $(TARGET) $(LAB9_OBJS) $(LAB9_TARGET)
