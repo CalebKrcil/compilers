@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tac.h"
 
 struct tree;
 struct typeinfo;
@@ -20,6 +21,7 @@ typedef struct sym_entry {
     int nullable;     
     typeptr *param_types;   
     struct sym_table *table;
+    struct addr location;
     struct sym_entry *next;
 } *SymbolTableEntry;
 
@@ -29,6 +31,7 @@ typedef struct sym_table {
     struct sym_table *parent;
     struct sym_entry **tbl;
     char *scope_name;  
+    int nextOffset;
 } *SymbolTable;
 
 SymbolTable mksymtab(int nBuckets, SymbolTable parent);

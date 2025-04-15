@@ -22,6 +22,7 @@ SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
         free(st);
         exit(EXIT_FAILURE);
     }
+    st->nextOffset = 0;
     return st;
 }
 
@@ -75,6 +76,15 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int i
     newEntry->next = st->tbl[index];
     newEntry->mutable = is_mutable;
     newEntry->nullable = is_nullable;
+
+    if (st->parent == NULL) {
+        newEntry->location.region = R_GLOBAL;
+    } else {
+        newEntry->location.region = R_LOCAL;
+    }
+    newEntry->location.u.offset = st->nextOffset;
+    st->nextOffset += 8;
+
     st->tbl[index] = newEntry;
     st->nEntries++;
 }
@@ -130,7 +140,6 @@ void print_symbols(SymbolTable st) {
 
     char **symbols = malloc(symbol_count * sizeof(char *));
     char **info = malloc(symbol_count * sizeof(char *));
-
     if (!symbols || !info) {
         fprintf(stderr, "Error: Memory allocation failed for symbol sorting\n");
         free(symbols);
@@ -144,41 +153,48 @@ void print_symbols(SymbolTable st) {
         while (entry) {
             symbols[idx] = entry->s;
             char *type_str = (entry->type ? typename(entry->type) : "(none)");
-            int total_len = strlen(type_str) + 50;
+
+            char region_str[32];
+            switch (entry->location.region) {
+                case R_GLOBAL:  strcpy(region_str, "global"); break;
+                case R_CLASS:   strcpy(region_str, "class"); break;
+                case R_LABEL:   strcpy(region_str, "label"); break;
+                case R_CONST:   strcpy(region_str, "const"); break;
+                case R_NAME:    strcpy(region_str, "name"); break;
+                case R_NONE:    strcpy(region_str, "none"); break;
+                case R_STRUCT:  strcpy(region_str, "struct"); break;
+                case R_PARAM:   strcpy(region_str, "param"); break;
+                case R_LOCAL:   strcpy(region_str, "local"); break;
+                case R_IMMED:   strcpy(region_str, "immed"); break;
+                default:
+                    sprintf(region_str, "region%d", entry->location.region);
+                    break;
+            }
+
+            int total_len = strlen(type_str) + 100;
             info[idx] = malloc(total_len);
-            snprintf(info[idx], total_len, "%s (mutable: %s, nullable: %s)",
+            snprintf(info[idx], total_len,
+                     "%s (mutable: %s, nullable: %s, address: %s:%d)",
                      type_str,
                      entry->mutable ? "yes" : "no",
-                     entry->nullable ? "yes" : "no");
-
+                     entry->nullable ? "yes" : "no",
+                     region_str,
+                     entry->location.u.offset);
             idx++;
             entry = entry->next;
         }
-    }
-
-    for (int i = 1; i < symbol_count; i++) {
-        char *key_sym = symbols[i];
-        char *key_info = info[i];
-        int j = i - 1;
-        while (j >= 0 && strcmp(symbols[j], key_sym) > 0) {
-            symbols[j + 1] = symbols[j];
-            info[j + 1] = info[j];
-            j--;
-        }
-        symbols[j + 1] = key_sym;
-        info[j + 1] = key_info;
     }
 
     for (int i = 0; i < symbol_count; i++) {
         printf("    %s : %s\n", symbols[i], info[i]);
         free(info[i]);
     }
-
     printf("---\n\n");
 
     free(symbols);
     free(info);
 }
+
 
 static int shared_type(typeptr t) {
     if (t == integer_typeptr ||

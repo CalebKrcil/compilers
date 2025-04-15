@@ -11,12 +11,14 @@ MAIN_SRC = main.c
 SYMTAB_SRC = symtab.c
 TYPE_SRC = type.c
 SEMANTICS_SRC = semantics.c
+CODEGEN_SRC = codegen.c
 
 LEX_OUT = k0lex.c
 YACC_OUT = k0gram.tab.c
 YACC_HEADER = k0gram.tab.h
 
-OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o type.o semantics.o
+# Add tac.o to OBJS so that TAC functions are available to codegen.c
+OBJS = k0gram.tab.o k0lex.o tree.o main.o symtab.o type.o semantics.o tac.o codegen.o
 
 #--- New definitions for Lab 9 ---
 LAB9_TARGET = lab9
@@ -55,6 +57,9 @@ type.o: $(TYPE_SRC)
 
 semantics.o: $(SEMANTICS_SRC)
 	$(CC) $(CFLAGS) -c $(SEMANTICS_SRC)
+
+codegen.o: $(CODEGEN_SRC) codegen.h tree.h tac.h
+	$(CC) $(CFLAGS) -c $(CODEGEN_SRC)
 
 #--- New target for Lab 9 ---
 $(LAB9_TARGET): $(LAB9_OBJS)

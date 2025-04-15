@@ -1,0 +1,7 @@
+.string
+/* no string constants */
+
+.data
+/* global variable declarations */
+
+.code

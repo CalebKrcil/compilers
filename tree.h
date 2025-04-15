@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "symtab.h"
+#include "tac.h"
 
 struct sym_table;
 typedef struct sym_table *SymbolTable;
@@ -36,6 +37,8 @@ struct tree {
     int is_nullable;
     int lineno;
     SymbolTable scope;
+    struct addr place;
+    struct instr *code;
 };
 
 typedef struct func_symtab_list {

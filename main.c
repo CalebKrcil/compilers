@@ -7,6 +7,7 @@
 #include "semantics.h"
 #include "tree.h"
 #include "symtab.h"
+#include "codegen.h"
 #define EXTENSION ".kt"
 
 extern int yylex();
@@ -245,6 +246,9 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
     } else {
         fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }
+
+    generate_code(root);
+    write_ic_file(current_filename, root->code);
 
     fclose(yyin);
     free(current_filename);

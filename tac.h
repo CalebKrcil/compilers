@@ -12,14 +12,26 @@ struct addr {
   } u;
 };
 
+typedef struct tac_list {
+    struct instr *head;
+    struct instr *tail;
+} tac_list;
+
 /* Regions: */
-#define R_GLOBAL 2001 /* can assemble as relative to the pc */
-#define R_LOCAL  2002 /* can assemble as relative to the ebp */
-#define R_CLASS  2003 /* can assemble as relative to the 'this' register */
-#define R_LABEL  2004 /* pseudo-region for labels in the code region */
-#define R_CONST  2005 /* pseudo-region for immediate mode constants */
-#define R_NAME   2006 /* pseudo-region for source names */
-#define R_NONE   2007 /* pseudo-region for unused addresses */
+/* Regions for 3-address code intermediate representation */
+#define R_GLOBAL 2001   /* For global variables and string constants */
+#define R_CLASS  2002   /* For class-related symbols (if needed) */
+#define R_LABEL  2003   /* For jump labels in the code region */
+#define R_CONST  2004   /* For global constants */
+#define R_NAME   2005   /* For symbolic names, if used */
+#define R_NONE   2006   /* Represents an invalid or unused region */
+
+/* New regions required for the assignment: */
+#define R_STRUCT 2007   /* For struct members */
+#define R_PARAM  2008   /* For function parameters */
+#define R_LOCAL  2009   /* For local variables and temporary values */
+#define R_IMMED  2010   /* For immediate values used directly in instructions */
+
 
 struct instr {
    int opcode;
@@ -55,6 +67,16 @@ struct instr {
 #define D_LABEL 3054
 #define D_END   3055
 #define D_PROT  3056 /* prototype "declaration" */
+#define O_IADD  3100   /* Integer addition */
+#define O_DADD  3101   /* Double (or floating-point) addition */
+#define O_ISUB  3110   /* Integer subtraction */
+#define O_DSUB  3111   /* Double subtraction */
+
+#define O_IMUL  3120   /* Integer multiplication */
+#define O_DMUL  3121   /* Double multiplication */
+
+#define O_IDIV  3130   /* Integer division */
+#define O_DDIV  3131   /* Double division */
 
 struct instr *gen(int, struct addr, struct addr, struct addr);
 struct instr *concat(struct instr *, struct instr *);
@@ -63,5 +85,11 @@ char *regionname(int i);
 char *opcodename(int i);
 char *pseudoname(int i);
 struct addr *genlabel();
+// Create a new tac_list with a single instruction.
+tac_list *new_tac_list(struct instr *instr);
+
+// Concatenates two tac_lists, returning a new tac_list.
+tac_list *concat_tac_lists(tac_list *list1, tac_list *list2);
+void free_tac_list(tac_list *list);
 
 #endif
