@@ -20,6 +20,7 @@ char *regionnames[] = {
 char *regionname(int i) { return regionnames[i-R_GLOBAL]; }
 char *opcodenames[] = {
     "IADD", "DADD", "ISUB", "DSUB", "IMUL", "DMUL", "IDIV", "DDIV",
+    "IEQ", "ILT", "ILE", "IGT", "IGE", "INE",
     "ADD","SUB", "MUL", "DIV", "NEG", "ASN", "ADDR", "LCONT", "SCONT", "GOTO",
     "BLT", "BLE", "BGT", "BGE", "BEQ", "BNE", "BIF", "BNIF", "PARM", "CALL",
     "RETURN"

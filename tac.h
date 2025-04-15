@@ -78,6 +78,13 @@ struct instr {
 #define O_IDIV  3130   /* Integer division */
 #define O_DDIV  3131   /* Double division */
 
+#define O_IEQ 3140
+#define O_ILT 3141
+#define O_ILE 3142
+#define O_IGT 3143
+#define O_IGE 3144
+#define O_INE 3145
+
 struct instr *gen(int, struct addr, struct addr, struct addr);
 struct instr *concat(struct instr *, struct instr *);
 struct instr *append(struct instr *l1, struct instr *l2);  /* <-- Added prototype */

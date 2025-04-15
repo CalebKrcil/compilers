@@ -5,3 +5,5 @@
 /* global variable declarations */
 
 .code
+DMUL	local:0, local:8, none:0
+ASN	local:24, local:32, immed:0
