@@ -5,5 +5,10 @@
 /* global variable declarations */
 
 .code
-DMUL	local:0, local:8, none:0
-ASN	local:24, local:32, immed:0
+ASN	invalid:0, invalid:0, none:0
+ASN	invalid:0, invalid:0, none:0
+IADD	local:0, invalid:0, invalid:0
+ASN	invalid:0, local:0, none:0
+IADD	local:8, invalid:0, invalid:0
+ASN	invalid:0, local:8, none:0
+CALL	local:16, invalid:0, none:0

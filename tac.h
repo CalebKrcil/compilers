@@ -60,6 +60,23 @@ struct instr {
 #define O_PARM  3019
 #define O_CALL  3020
 #define O_RET   3021
+#define O_IADD  3022   /* Integer addition */
+#define O_DADD  3023   /* Double (or floating-point) addition */
+#define O_ISUB  3024   /* Integer subtraction */
+#define O_DSUB  3025   /* Double subtraction */
+
+#define O_IMUL  3026   /* Integer multiplication */
+#define O_DMUL  3027   /* Double multiplication */
+
+#define O_IDIV  3028   /* Integer division */
+#define O_DDIV  3029   /* Double division */
+
+#define O_IEQ 3030
+#define O_ILT 3031
+#define O_ILE 3032
+#define O_IGT 3033
+#define O_IGE 3034
+#define O_INE 3035
 /* declarations/pseudo instructions */
 #define D_GLOB  3051
 #define D_PROC  3052
@@ -67,23 +84,6 @@ struct instr {
 #define D_LABEL 3054
 #define D_END   3055
 #define D_PROT  3056 /* prototype "declaration" */
-#define O_IADD  3100   /* Integer addition */
-#define O_DADD  3101   /* Double (or floating-point) addition */
-#define O_ISUB  3110   /* Integer subtraction */
-#define O_DSUB  3111   /* Double subtraction */
-
-#define O_IMUL  3120   /* Integer multiplication */
-#define O_DMUL  3121   /* Double multiplication */
-
-#define O_IDIV  3130   /* Integer division */
-#define O_DDIV  3131   /* Double division */
-
-#define O_IEQ 3140
-#define O_ILT 3141
-#define O_ILE 3142
-#define O_IGT 3143
-#define O_IGE 3144
-#define O_INE 3145
 
 struct instr *gen(int, struct addr, struct addr, struct addr);
 struct instr *concat(struct instr *, struct instr *);
