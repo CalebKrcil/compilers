@@ -17,7 +17,8 @@
  
  #include "tree.h"
  #include "tac.h"
- #include "ytab.h"   // For token categories
+ // #include "ytab.h"   // For token categories
+ #include "k0gram.tab.h"
  #include "type.h"
  #include "codegen.h"
  #include "symtab.h"
@@ -197,8 +198,10 @@
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
 
     if (t->leaf) {
+        printf("Category: %d\n", t->leaf->category);
         switch (t->leaf->category) {
             case IntegerLiteral: {
+                printf("int literal\n");
                 t->place    = new_temp();
                 struct addr imm = { .region = R_IMMED, .u = { .offset = t->leaf->value.ival } };
                 t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
@@ -208,6 +211,7 @@
                 return;
             }
             case RealLiteral: {
+                printf("real literal\n");
                 t->place    = new_temp();
                 struct addr imm = { .region = R_IMMED, .u = { .offset = (int)t->leaf->value.dval } };
                 t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
@@ -217,6 +221,7 @@
                 return;
             }
             case StringLiteral: {
+                printf("string literal\n");
                 t->place    = new_temp();
                 struct addr imm = { .region = R_IMMED, .u = { .offset = 0 } };
                 t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
@@ -226,6 +231,7 @@
                 return;
             }
             case BooleanLiteral: {
+                printf("boolean literal\n");
                 t->place    = new_temp();
                 int val      = strcmp(t->leaf->text, "true")==0 ? 1 : 0;
                 struct addr imm = { .region = R_IMMED, .u = { .offset = val } };
@@ -236,6 +242,7 @@
                 return;
             }
             case Identifier: {
+                printf("identifier\n");
                 SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
                 if (e) {
                     t->place = e->location;
@@ -251,6 +258,7 @@
                 return;
             }
             default:
+                printf("butt\n");
                 break;
         }
     }
@@ -568,12 +576,11 @@
             // Ensure condition has a place
             if (t->nkids > 0 && t->kids[0] != NULL) {
                 if (t->kids[0]->place.region == R_NONE) {
-                    t->kids[0]->place = new_temp();
+                    generate_code(t->kids[0]);  // Actually generate code for condition
                 }
                 
                 // Branch if condition is false
-                struct instr *branch = gen(O_BZ, if_false, t->kids[0]->place, NULL_ADDR);
-                t->code = concat(t->code, branch);
+                t->code = concat(t->code, gen(O_BZ, if_false, t->kids[0]->place, NULL_ADDR));
             } else {
                 fprintf(stderr, "Error: ifStatement has no condition\n");
                 return;
@@ -581,25 +588,30 @@
             
             // Generate code for 'then' branch (kids[1])
             if (t->nkids > 1 && t->kids[1] != NULL) {
-                // Code for 'then' branch is already in t->code from child processing
+                // Ensure we have code for 'then' branch
+                if (t->kids[1]->code == NULL) {
+                    generate_code(t->kids[1]);
+                }
+                t->code = concat(t->code, t->kids[1]->code);
             }
             
             // Jump to end after 'then' branch
-            struct instr *jump = gen(O_BR, if_end, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, jump);
+            t->code = concat(t->code, gen(O_BR, if_end, NULL_ADDR, NULL_ADDR));
             
             // Label for 'else' branch
-            struct instr *else_label = gen(O_LBL, if_false, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, else_label);
+            t->code = concat(t->code, gen(O_LBL, if_false, NULL_ADDR, NULL_ADDR));
             
             // Generate code for 'else' branch if it exists (kids[2])
             if (t->nkids > 2 && t->kids[2] != NULL) {
-                // Code for 'else' branch is already in t->code from child processing
+                // Ensure we have code for 'else' branch
+                if (t->kids[2]->code == NULL) {
+                    generate_code(t->kids[2]);
+                }
+                t->code = concat(t->code, t->kids[2]->code);
             }
             
             // Label for end of if-statement
-            struct instr *end_label = gen(O_LBL, if_end, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, end_label);
+            t->code = concat(t->code, gen(O_LBL, if_end, NULL_ADDR, NULL_ADDR));
         }
         // While Loop
         else if (strcmp(t->symbolname, "whileStatement") == 0) {
@@ -608,18 +620,16 @@
             struct addr loop_end = *genlabel();
             
             // Label for loop start
-            struct instr *start_label = gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, start_label);
+            t->code = concat(t->code, gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR));
             
             // Generate code for condition
             if (t->nkids > 0 && t->kids[0] != NULL) {
                 if (t->kids[0]->place.region == R_NONE) {
-                    t->kids[0]->place = new_temp();
+                    generate_code(t->kids[0]);  // Actually generate code for condition
                 }
                 
                 // Branch to end if condition is false
-                struct instr *branch = gen(O_BZ, loop_end, t->kids[0]->place, NULL_ADDR);
-                t->code = concat(t->code, branch);
+                t->code = concat(t->code, gen(O_BZ, loop_end, t->kids[0]->place, NULL_ADDR));
             } else {
                 fprintf(stderr, "Error: whileStatement has no condition\n");
                 return;
@@ -627,16 +637,18 @@
             
             // Generate code for loop body
             if (t->nkids > 1 && t->kids[1] != NULL) {
-                // Body code is already in t->code from child processing
+                // Ensure we have code for body
+                if (t->kids[1]->code == NULL) {
+                    generate_code(t->kids[1]);
+                }
+                t->code = concat(t->code, t->kids[1]->code);
             }
             
             // Jump back to start
-            struct instr *jump = gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, jump);
+            t->code = concat(t->code, gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR));
             
             // Label for loop end
-            struct instr *end_label = gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, end_label);
+            t->code = concat(t->code, gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR));
         }
         // For Loop
         else if (strcmp(t->symbolname, "forStatement") == 0) {
@@ -647,79 +659,49 @@
             
             // Generate code for initialization (typically kids[0])
             if (t->nkids > 0 && t->kids[0] != NULL) {
-                // Initialization code is already in t->code from child processing
+                if (t->kids[0]->code == NULL) {
+                    generate_code(t->kids[0]);
+                }
+                t->code = concat(t->code, t->kids[0]->code);
             }
             
             // Label for loop start
-            struct instr *start_label = gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, start_label);
+            t->code = concat(t->code, gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR));
             
             // Generate code for condition (typically kids[1])
             if (t->nkids > 1 && t->kids[1] != NULL) {
                 if (t->kids[1]->place.region == R_NONE) {
-                    t->kids[1]->place = new_temp();
+                    generate_code(t->kids[1]);
                 }
                 
                 // Branch to end if condition is false
-                struct instr *branch = gen(O_BZ, loop_end, t->kids[1]->place, NULL_ADDR);
-                t->code = concat(t->code, branch);
+                t->code = concat(t->code, gen(O_BZ, loop_end, t->kids[1]->place, NULL_ADDR));
             }
             
             // Generate code for body (typically kids[3])
             if (t->nkids > 3 && t->kids[3] != NULL) {
-                // Body code is already in t->code from child processing
+                if (t->kids[3]->code == NULL) {
+                    generate_code(t->kids[3]);
+                }
+                t->code = concat(t->code, t->kids[3]->code);
             }
             
             // Label for update section
-            struct instr *update_label = gen(O_LBL, loop_update, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, update_label);
+            t->code = concat(t->code, gen(O_LBL, loop_update, NULL_ADDR, NULL_ADDR));
             
             // Generate code for update expression (typically kids[2])
             if (t->nkids > 2 && t->kids[2] != NULL) {
-                // Update code is already in t->code from child processing
+                if (t->kids[2]->code == NULL) {
+                    generate_code(t->kids[2]);
+                }
+                t->code = concat(t->code, t->kids[2]->code);
             }
             
             // Jump back to start
-            struct instr *jump = gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, jump);
+            t->code = concat(t->code, gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR));
             
             // Label for loop end
-            struct instr *end_label = gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR);
-            t->code = concat(t->code, end_label);
-        }
-        else if (strcmp(t->symbolname, "arrayAccess") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 2 || t->kids[0] == NULL || t->kids[1] == NULL) {
-                fprintf(stderr, "Error: arrayAccess node has insufficient children\n");
-                return;
-            }
-            // Ensure base and index have places
-            if (t->kids[0]->place.region == R_NONE) {
-                t->kids[0]->place = new_temp();
-            }
-            if (t->kids[1]->place.region == R_NONE) {
-                t->kids[1]->place = new_temp();
-            }
-            
-            // Compute offset = index * elementSize (assuming 8 bytes)
-            struct addr elemSize;
-            elemSize.region = R_IMMED;
-            elemSize.u.offset = 8;
-            struct addr offsetTemp = new_temp();
-            struct instr *mulInst = gen(O_IMUL, offsetTemp, t->kids[1]->place, elemSize);
-            t->code = concat(t->code, mulInst);
-            
-            // Compute element address
-            t->place = new_temp();
-            struct instr *addrInst = gen(O_ADDR, t->place, t->kids[0]->place, offsetTemp);
-            t->code = concat(t->code, addrInst);
-            
-            // Load the value at computed address
-            struct addr loadTemp = new_temp();
-            struct instr *loadInst = gen(O_LCONT, loadTemp, t->place, NULL_ADDR);
-            t->code = concat(t->code, loadInst);
-            t->place = loadTemp;
-            return;
+            t->code = concat(t->code, gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR));
         }
             // ... other node handlers ...
     }
