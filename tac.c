@@ -15,14 +15,19 @@ char *regionnames[] = {
     "struct",  /* R_STRUCT, 2007 */
     "param",   /* R_PARAM, 2008 */
     "local",   /* R_LOCAL, 2009 */
-    "immed"    /* R_IMMED, 2010 */
+    "immed",    /* R_IMMED, 2010 */
+    "fp",
+    "sp",
+    "mem",
+    "ret"
 };
 char *regionname(int i) { return regionnames[i-R_GLOBAL]; }
 char *opcodenames[] = {
     "ADD","SUB", "MUL", "DIV", "NEG", "ASN", "ADDR", "LCONT", "SCONT", "GOTO",
     "BLT", "BLE", "BGT", "BGE", "BEQ", "BNE", "BIF", "BNIF", "PARM", "CALL",
     "RETURN", "IADD", "DADD", "ISUB", "DSUB", "IMUL", "DMUL", "IDIV", "DDIV",
-    "IEQ", "ILT", "ILE", "IGT", "IGE", "INE",
+    "IEQ", "ILT", "ILE", "IGT", "IGE", "INE", "LBL", "BR", "BZ", "BNZ", "NOT",
+    "PUSH", "POP", "ALLOC", "DEALLOC"
    };
 char *opcodename(int i) { return opcodenames[i-O_ADD]; }
 char *pseudonames[] = {

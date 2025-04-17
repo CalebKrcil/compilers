@@ -31,6 +31,10 @@ typedef struct tac_list {
 #define R_PARAM  2008   /* For function parameters */
 #define R_LOCAL  2009   /* For local variables and temporary values */
 #define R_IMMED  2010   /* For immediate values used directly in instructions */
+#define R_FP     2011   /* frame pointer */
+#define R_SP     2012   /* stack pointer */
+#define R_MEM    2013   /* indirect memory (for loads/stores) */
+#define R_RET    2014   /* return‐value register */
 
 
 struct instr {
@@ -77,6 +81,15 @@ struct instr {
 #define O_IGT 3033
 #define O_IGE 3034
 #define O_INE 3035
+#define O_LBL     3036   /* label marker */
+#define O_BR      3037   /* unconditional branch */
+#define O_BZ      3038   /* branch if zero */
+#define O_BNZ     3039   /* branch if not zero */
+#define O_NOT     3040   /* logical NOT */
+#define O_PUSH    3041   /* push register onto stack */
+#define O_POP     3042   /* pop from stack into register */
+#define O_ALLOC   3043   /* allocate locals (stack frame) */
+#define O_DEALLOC 3044   /* deallocate locals */
 /* declarations/pseudo instructions */
 #define D_GLOB  3051
 #define D_PROC  3052

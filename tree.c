@@ -287,6 +287,8 @@ struct tree *alctree(int prodrule, char *symbolname, int nkids, ...) {
     t->is_nullable = 0;
     t->lineno = yylineno;
     t->scope = NULL;
+    t->place.region = R_NONE;
+    t->place.u.offset = 0;
 
     va_list args;
     va_start(args, nkids);

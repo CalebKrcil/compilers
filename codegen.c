@@ -6,8 +6,7 @@
  *
  * It provides functionality such as generating the intermediate code file,
  * printing operands/instructions, and traversing the AST for code generation.
- * The generate_code() function below has been rewritten to perform a complete
- * postorder traversal (mimicking the traversal in semantics.c :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}),
+ * The generate_code() function below performs a complete postorder traversal
  * so that every node in the AST is visited and all instructions are generated.
  */
 
@@ -21,12 +20,16 @@
  #include "ytab.h"   // For token categories
  #include "type.h"
  #include "codegen.h"
+ #include "symtab.h"
  
  #define NULL_ADDR ((struct addr){R_NONE, {.offset = 0}})
  #define DEBUG_OUTPUT 1  // Set to 1 to enable debug output, 0 to disable
  
+ extern SymbolTable currentFunctionSymtab;
+
  /* External function prototypes from tac.c */
  extern struct addr new_temp(void);
+ extern struct addr *genlabel(void);
  extern struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3);
  extern struct instr *concat(struct instr *l1, struct instr *l2);
  
@@ -163,22 +166,26 @@
  /*
   * generate_code
   *
-  * This complete implementation traverses the AST in postorder.
-  * 1. Recursively process all children.
-  * 2. Concatenate the TAC instructions from all children.
-  * 3. Generate the current node's TAC based on its kind.
-  *
-  * This implementation handles:
+  * This enhanced implementation traverses the AST in postorder and handles a comprehensive
+  * set of language constructs:
+  * 
+  * Expressions:
   *   • Literals (IntegerLiteral, RealLiteral, StringLiteral)
   *   • Identifiers
-  *   • Variable declarations (variableDeclaration)
-  *   • Assignments (assignment)
   *   • Binary arithmetic operators (additive, subtractive, multiplicative, division)
-  *   • Comparison operators (comparison)
-  *   • Unary negation (negation)
-  *   • Function calls (functionCall)
+  *   • Comparison operators
+  *   • Logical operators (AND, OR)
+  *   • Unary operations (negation, NOT)
   *
-  * Additional node types can be added following the same pattern.
+  * Statements:
+  *   • Variable declarations and assignments
+  *   • Function calls and declarations
+  *   • Control flow statements (if-else, while loops, for loops)
+  *   • Return statements
+  *
+  * Array operations:
+  *   • Array access
+  *   • Array creation
   */
  void generate_code(struct tree *t) {
     if (t == NULL) {
@@ -186,9 +193,66 @@
         return;
     }
     
-    // Initialize t->code to NULL if not already set
-    if (t->code == NULL) {
-        t->code = NULL;  // Explicit NULL initialization
+    t->code  = NULL;
+    t->place = (struct addr){ R_NONE, { .offset = 0 } };
+
+    if (t->leaf) {
+        switch (t->leaf->category) {
+            case IntegerLiteral: {
+                t->place    = new_temp();
+                struct addr imm = { .region = R_IMMED, .u = { .offset = t->leaf->value.ival } };
+                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
+                debug_print("LIT int %d -> %s:%d\n",
+                            t->leaf->value.ival,
+                            regionname(t->place.region), t->place.u.offset);
+                return;
+            }
+            case RealLiteral: {
+                t->place    = new_temp();
+                struct addr imm = { .region = R_IMMED, .u = { .offset = (int)t->leaf->value.dval } };
+                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
+                debug_print("LIT real %f -> %s:%d\n",
+                            t->leaf->value.dval,
+                            regionname(t->place.region), t->place.u.offset);
+                return;
+            }
+            case StringLiteral: {
+                t->place    = new_temp();
+                struct addr imm = { .region = R_IMMED, .u = { .offset = 0 } };
+                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
+                debug_print("LIT str \"%s\" -> %s:%d\n",
+                            t->leaf->text,
+                            regionname(t->place.region), t->place.u.offset);
+                return;
+            }
+            case BooleanLiteral: {
+                t->place    = new_temp();
+                int val      = strcmp(t->leaf->text, "true")==0 ? 1 : 0;
+                struct addr imm = { .region = R_IMMED, .u = { .offset = val } };
+                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
+                debug_print("LIT bool %s -> %s:%d\n",
+                            t->leaf->text,
+                            regionname(t->place.region), t->place.u.offset);
+                return;
+            }
+            case Identifier: {
+                SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
+                if (e) {
+                    t->place = e->location;
+                    debug_print("ID '%s' -> %s:%d\n",
+                                t->leaf->text,
+                                regionname(t->place.region), t->place.u.offset);
+                } else {
+                    t->place = new_temp();
+                    debug_print("ID '%s' missing -> temp %s:%d\n",
+                                t->leaf->text,
+                                regionname(t->place.region), t->place.u.offset);
+                }
+                return;
+            }
+            default:
+                break;
+        }
     }
     
     // Process all children first (postorder traversal)
@@ -214,110 +278,422 @@
     // Set the node's code to the concatenated children's code
     t->code = children_code;
     
-    // Handle leaf nodes
-    if (t->leaf != NULL) {
-        switch (t->leaf->category) {
-            case IntegerLiteral: {
-                t->place = new_temp();
-                struct addr imm;
-                imm.region = R_IMMED;
-                imm.u.offset = t->leaf->value.ival;
-                struct instr *inst = gen(O_ASN, t->place, imm, NULL_ADDR);
-                if (inst != NULL) {
-                    t->code = concat(t->code, inst);
-                }
-                break;
-            }
-            case RealLiteral: {
-                t->place = new_temp();
-                struct addr imm;
-                imm.region = R_IMMED;
-                imm.u.offset = (int)t->leaf->value.dval;
-                struct instr *inst = gen(O_ASN, t->place, imm, NULL_ADDR);
-                if (inst != NULL) {
-                    t->code = concat(t->code, inst);
-                }
-                break;
-            }
-            case StringLiteral: {
-                t->place = new_temp();
-                struct addr imm;
-                imm.region = R_IMMED;
-                imm.u.offset = 0; /* Placeholder for string constant index */
-                struct instr *inst = gen(O_ASN, t->place, imm, NULL_ADDR);
-                if (inst != NULL) {
-                    t->code = concat(t->code, inst);
-                }
-                break;
-            }
-            case Identifier: {
-                // Ensure identifier has a place
-                if (t->place.region == R_NONE) {
-                    t->place = new_temp();
-                }
-                // No generation needed for simple identifier reference
-                break;
-            }
-            default:
-                // For unsupported leaf types, just ensure we have a place
-                if (t->place.region == R_NONE) {
-                    t->place = new_temp();
-                }
-                break;
-        }
-        // For leaf nodes, we've now handled the code generation
-        return;
-    }
-    
     // Handle non-leaf nodes
     if (t->symbolname != NULL) {
-        // Variable Declaration
-        if (strcmp(t->symbolname, "variableDeclaration") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 1) {
-                fprintf(stderr, "Error: variableDeclaration node has insufficient children\n");
+                // Variable Declaration
+                /* 1) Variable Declaration */
+        if (strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids >= 1) {
+            struct tree *id = t->kids[0];
+            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
+            if (!entry) {
+                fprintf(stderr, "Error: variable '%s' not in symtab\n", id->leaf->text);
                 return;
             }
+            t->place = entry->location;
+            /* initializer, if any */
+            if (t->nkids > 2 && t->kids[2]) {
+                if (t->kids[2]->place.region == R_NONE) generate_code(t->kids[2]);
+                t->code = concat(t->code,
+                    gen(O_ASN, t->place,
+                        t->kids[2]->place,
+                        NULL_ADDR));
+            }
+            return;
+        }
+
+        /* 2) Assignment */
+        else if (strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
+            struct tree *lhs = t->kids[0], *rhs = t->kids[1];
+            if (rhs->place.region == R_NONE) generate_code(rhs);
+            t->place = lhs->place;
+            t->code  = concat(t->code,
+                        gen(O_ASN, lhs->place,
+                            rhs->place,
+                            NULL_ADDR));
+            return;
+        }
+
+        /* 3) Binary arithmetic (add, sub, mul, div) */
+        else if (strcmp(t->symbolname, "additive_expression") == 0 ||
+                strcmp(t->symbolname, "subtractive_expression") == 0 ||
+                strcmp(t->symbolname, "multiplicative_expression") == 0 ||
+                strcmp(t->symbolname, "division_expression") == 0) {
+            /* force operands */
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            if (t->kids[1]->place.region == R_NONE) generate_code(t->kids[1]);
+
+            int opcode;
+            if      (strcmp(t->symbolname, "additive_expression")==0)      opcode = O_IADD;
+            else if (strcmp(t->symbolname, "subtractive_expression")==0)   opcode = O_ISUB;
+            else if (strcmp(t->symbolname, "multiplicative_expression")==0)opcode = O_IMUL;
+            else                                                           opcode = O_IDIV;
+
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                        gen(opcode, t->place,
+                            t->kids[0]->place,
+                            t->kids[1]->place));
+            return;
+        }
+
+        /* 4) Comparison (<, >, <=, >=, ==, !=) */
+        else if (strcmp(t->symbolname, "comparison") == 0 && t->nkids >= 3) {
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            if (t->kids[2]->place.region == R_NONE) generate_code(t->kids[2]);
+
+            int opcode = O_IEQ;
+            if (t->kids[1] && t->kids[1]->leaf) {
+                char *op = t->kids[1]->leaf->text;
+                if      (strcmp(op, "<")==0)  opcode = O_ILT;
+                else if (strcmp(op, ">")==0)  opcode = O_IGT;
+                else if (strcmp(op, "<=")==0) opcode = O_ILE;
+                else if (strcmp(op, ">=")==0) opcode = O_IGE;
+                else if (strcmp(op, "!=")==0) opcode = O_INE;
+            }
+
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                        gen(opcode, t->place,
+                            t->kids[0]->place,
+                            t->kids[2]->place));
+            return;
+        }
+
+        /* 5) Unary negation */
+        else if (strcmp(t->symbolname, "negation") == 0 && t->nkids >= 1) {
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                        gen(O_NEG, t->place,
+                            t->kids[0]->place,
+                            NULL_ADDR));
+            return;
+        }
+
+        /* 6) Logical NOT */
+        else if (strcmp(t->symbolname, "logical_not") == 0 && t->nkids >= 1) {
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                        gen(O_NOT, t->place,
+                            t->kids[0]->place,
+                            NULL_ADDR));
+            return;
+        }
+
+        /* 7) Logical AND (short‑circuit) */
+        else if (strcmp(t->symbolname, "logical_and") == 0 && t->nkids >= 2) {
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            if (t->kids[1]->place.region == R_NONE) generate_code(t->kids[1]);
+
+            struct addr L_false = *genlabel();
+            struct addr L_end   = *genlabel();
+
+            t->place = new_temp();
+            /* init false */
+            t->code = concat(t->code,
+                    gen(O_ASN, t->place,
+                        (struct addr){R_IMMED, .u.offset=0},
+                        NULL_ADDR));
+            /* if first==0 goto L_false */
+            t->code = concat(t->code,
+                    gen(O_BZ, L_false,
+                        t->kids[0]->place,
+                        NULL_ADDR));
+            /* if second==0 goto L_false */
+            t->code = concat(t->code,
+                    gen(O_BZ, L_false,
+                        t->kids[1]->place,
+                        NULL_ADDR));
+            /* both true -> result=1 */
+            t->code = concat(t->code,
+                    gen(O_ASN, t->place,
+                        (struct addr){R_IMMED, .u.offset=1},
+                        NULL_ADDR));
+            /* jump end */
+            t->code = concat(t->code,
+                    gen(O_BR, L_end, NULL_ADDR, NULL_ADDR));
+            /* L_false: */
+            t->code = concat(t->code,
+                    gen(O_LBL, L_false, NULL_ADDR, NULL_ADDR));
+            /* L_end: */
+            t->code = concat(t->code,
+                    gen(O_LBL, L_end,   NULL_ADDR, NULL_ADDR));
+            return;
+        }
+
+        /* 8) Logical OR (short‑circuit) */
+        else if (strcmp(t->symbolname, "logical_or") == 0 && t->nkids >= 2) {
+            if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
+            if (t->kids[1]->place.region == R_NONE) generate_code(t->kids[1]);
+
+            struct addr L_true = *genlabel();
+            struct addr L_end  = *genlabel();
+
+            t->place = new_temp();
+            /* init false */
+            t->code = concat(t->code,
+                    gen(O_ASN, t->place,
+                        (struct addr){R_IMMED, .u.offset=0},
+                        NULL_ADDR));
+            /* if first!=0 goto L_true */
+            t->code = concat(t->code,
+                    gen(O_BNZ, L_true,
+                        t->kids[0]->place,
+                        NULL_ADDR));
+            /* if second!=0 goto L_true */
+            t->code = concat(t->code,
+                    gen(O_BNZ, L_true,
+                        t->kids[1]->place,
+                        NULL_ADDR));
+            /* jump end (result already 0) */
+            t->code = concat(t->code,
+                    gen(O_BR, L_end, NULL_ADDR, NULL_ADDR));
+            /* L_true: result=1 */
+            t->code = concat(t->code,
+                    gen(O_LBL, L_true, NULL_ADDR, NULL_ADDR));
+            t->code = concat(t->code,
+                    gen(O_ASN, t->place,
+                        (struct addr){R_IMMED, .u.offset=1},
+                        NULL_ADDR));
+            /* L_end: */
+            t->code = concat(t->code,
+                    gen(O_LBL, L_end,  NULL_ADDR, NULL_ADDR));
+            return;
+        }
+
+        /* 9) Function Call */
+        else if (strcmp(t->symbolname, "functionCall") == 0 && t->nkids >= 1) {
+            /* push parameters */
+            if (t->nkids >= 2 && t->kids[1]) {
+                struct tree *args = t->kids[1];
+                for (int i=0; i<args->nkids; ++i) {
+                    if (args->kids[i]->place.region == R_NONE)
+                        generate_code(args->kids[i]);
+                    t->code = concat(t->code,
+                            gen(O_PARM, NULL_ADDR,
+                                args->kids[i]->place,
+                                NULL_ADDR));
+                }
+            }
+            /* emit call */
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                        gen(O_CALL, t->place,
+                            t->kids[0]->place,
+                            NULL_ADDR));
+            return;
+        }
+
+        /* 10) Function Declaration */
+        else if ((strcmp(t->symbolname, "functionDeclaration")==0 || t->prodrule==327)
+                && t->nkids > 0) {
+            struct addr entry = *genlabel();
+            struct addr exit  = *genlabel();
+            /* save old body */
+            struct instr *body = t->code;
+            t->code = NULL;
+            /* prologue */
+            t->code = concat(t->code, gen(O_LBL,   entry, NULL_ADDR, NULL_ADDR));
+            t->code = concat(t->code, gen(O_PUSH,  NULL_ADDR,
+                                        (struct addr){R_FP, .u.offset=0},
+                                        NULL_ADDR));
+            t->code = concat(t->code, gen(O_ASN,   (struct addr){R_FP, .u.offset=0},
+                                        (struct addr){R_SP, .u.offset=0},
+                                        NULL_ADDR));
+            int sz = currentFunctionSymtab->nextOffset;
+            t->code = concat(t->code, gen(O_ALLOC, NULL_ADDR,
+                                        (struct addr){R_IMMED, .u.offset=sz},
+                                        NULL_ADDR));
+            /* body */
+            t->code = concat(t->code, body);
+            /* epilogue */
+            t->code = concat(t->code, gen(O_LBL,   exit, NULL_ADDR, NULL_ADDR));
+            t->code = concat(t->code, gen(O_DEALLOC,NULL_ADDR,
+                                        (struct addr){R_IMMED, .u.offset=sz},
+                                        NULL_ADDR));
+            t->code = concat(t->code, gen(O_POP,   (struct addr){R_FP,.u.offset=0},
+                                        NULL_ADDR,NULL_ADDR));
+            t->code = concat(t->code, gen(O_RET,   NULL_ADDR,NULL_ADDR,NULL_ADDR));
+            return;
+        }
+
+        /* 11) Return Statement */
+        else if (strcmp(t->symbolname, "returnStatement") == 0) {
+            if (t->nkids > 0 && t->kids[0]->place.region == R_NONE)
+                generate_code(t->kids[0]);
+            if (t->nkids > 0) {
+                /* move into R_RET */
+                t->code = concat(t->code,
+                        gen(O_ASN,
+                            (struct addr){R_RET,.u.offset=0},
+                            t->kids[0]->place,
+                            NULL_ADDR));
+            }
+            t->code = concat(t->code,
+                    gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
+            return;
+        }
+
+        /* 12) Array Access */
+        else if (strcmp(t->symbolname, "arrayAccess")==0 && t->nkids>=2) {
+            if (t->kids[0]->place.region==R_NONE) generate_code(t->kids[0]);
+            if (t->kids[1]->place.region==R_NONE) generate_code(t->kids[1]);
+
+            /* offset = index * 8 */
+            struct addr offset = new_temp();
+            t->code = concat(t->code,
+                    gen(O_IMUL, offset,
+                        t->kids[1]->place,
+                        (struct addr){R_IMMED,.u.offset=8}));
+            /* addr = base + offset */
+            t->place = new_temp();
+            t->code  = concat(t->code,
+                    gen(O_ADDR, t->place,
+                        t->kids[0]->place,
+                        offset));
+            /* load */
+            struct addr load = new_temp();
+            t->code = concat(t->code,
+                    gen(O_LCONT, load, t->place, NULL_ADDR));
+            t->place = load;
+            return;
+        }
+        // If-Else Statement
+        else if (strcmp(t->symbolname, "ifStatement") == 0) {
+            // Generate labels for branches
+            struct addr if_false = *genlabel();
+            struct addr if_end = *genlabel();
             
-            // Ensure identifier (first child) has a place
-            if (t->kids[0] != NULL) {
+            // Ensure condition has a place
+            if (t->nkids > 0 && t->kids[0] != NULL) {
                 if (t->kids[0]->place.region == R_NONE) {
                     t->kids[0]->place = new_temp();
                 }
-                t->place = t->kids[0]->place;
+                
+                // Branch if condition is false
+                struct instr *branch = gen(O_BZ, if_false, t->kids[0]->place, NULL_ADDR);
+                t->code = concat(t->code, branch);
             } else {
-                t->place = new_temp();
+                fprintf(stderr, "Error: ifStatement has no condition\n");
+                return;
             }
             
-            // Handle initialization if present and valid
+            // Generate code for 'then' branch (kids[1])
+            if (t->nkids > 1 && t->kids[1] != NULL) {
+                // Code for 'then' branch is already in t->code from child processing
+            }
+            
+            // Jump to end after 'then' branch
+            struct instr *jump = gen(O_BR, if_end, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, jump);
+            
+            // Label for 'else' branch
+            struct instr *else_label = gen(O_LBL, if_false, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, else_label);
+            
+            // Generate code for 'else' branch if it exists (kids[2])
             if (t->nkids > 2 && t->kids[2] != NULL) {
-                // Ensure initializer has a place
-                if (t->kids[2]->place.region == R_NONE) {
-                    // Cannot generate code for initializer without a place
-                    fprintf(stderr, "Warning: Variable initializer has no place\n");
-                } else {
-                    // Generate assignment for initialization
-                    struct instr *asn = gen(O_ASN, t->place, t->kids[2]->place, NULL_ADDR);
-                    if (asn != NULL) {
-                        t->code = concat(t->code, asn);
-                    }
+                // Code for 'else' branch is already in t->code from child processing
+            }
+            
+            // Label for end of if-statement
+            struct instr *end_label = gen(O_LBL, if_end, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, end_label);
+        }
+        // While Loop
+        else if (strcmp(t->symbolname, "whileStatement") == 0) {
+            // Generate labels for loop
+            struct addr loop_start = *genlabel();
+            struct addr loop_end = *genlabel();
+            
+            // Label for loop start
+            struct instr *start_label = gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, start_label);
+            
+            // Generate code for condition
+            if (t->nkids > 0 && t->kids[0] != NULL) {
+                if (t->kids[0]->place.region == R_NONE) {
+                    t->kids[0]->place = new_temp();
                 }
+                
+                // Branch to end if condition is false
+                struct instr *branch = gen(O_BZ, loop_end, t->kids[0]->place, NULL_ADDR);
+                t->code = concat(t->code, branch);
+            } else {
+                fprintf(stderr, "Error: whileStatement has no condition\n");
+                return;
             }
+            
+            // Generate code for loop body
+            if (t->nkids > 1 && t->kids[1] != NULL) {
+                // Body code is already in t->code from child processing
+            }
+            
+            // Jump back to start
+            struct instr *jump = gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, jump);
+            
+            // Label for loop end
+            struct instr *end_label = gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, end_label);
         }
-        // Assignment
-        else if (strcmp(t->symbolname, "assignment") == 0) {
+        // For Loop
+        else if (strcmp(t->symbolname, "forStatement") == 0) {
+            // Generate labels for loop
+            struct addr loop_start = *genlabel();
+            struct addr loop_update = *genlabel();
+            struct addr loop_end = *genlabel();
+            
+            // Generate code for initialization (typically kids[0])
+            if (t->nkids > 0 && t->kids[0] != NULL) {
+                // Initialization code is already in t->code from child processing
+            }
+            
+            // Label for loop start
+            struct instr *start_label = gen(O_LBL, loop_start, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, start_label);
+            
+            // Generate code for condition (typically kids[1])
+            if (t->nkids > 1 && t->kids[1] != NULL) {
+                if (t->kids[1]->place.region == R_NONE) {
+                    t->kids[1]->place = new_temp();
+                }
+                
+                // Branch to end if condition is false
+                struct instr *branch = gen(O_BZ, loop_end, t->kids[1]->place, NULL_ADDR);
+                t->code = concat(t->code, branch);
+            }
+            
+            // Generate code for body (typically kids[3])
+            if (t->nkids > 3 && t->kids[3] != NULL) {
+                // Body code is already in t->code from child processing
+            }
+            
+            // Label for update section
+            struct instr *update_label = gen(O_LBL, loop_update, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, update_label);
+            
+            // Generate code for update expression (typically kids[2])
+            if (t->nkids > 2 && t->kids[2] != NULL) {
+                // Update code is already in t->code from child processing
+            }
+            
+            // Jump back to start
+            struct instr *jump = gen(O_BR, loop_start, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, jump);
+            
+            // Label for loop end
+            struct instr *end_label = gen(O_LBL, loop_end, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code, end_label);
+        }
+        else if (strcmp(t->symbolname, "arrayAccess") == 0) {
             // Minimal required kids check
-            if (t->nkids < 2) {
-                fprintf(stderr, "Error: assignment node has insufficient children\n");
+            if (t->nkids < 2 || t->kids[0] == NULL || t->kids[1] == NULL) {
+                fprintf(stderr, "Error: arrayAccess node has insufficient children\n");
                 return;
             }
-            
-            // Ensure both LHS and RHS have places
-            if (t->kids[0] == NULL || t->kids[1] == NULL) {
-                fprintf(stderr, "Error: NULL child in assignment\n");
-                return;
-            }
-            
+            // Ensure base and index have places
             if (t->kids[0]->place.region == R_NONE) {
                 t->kids[0]->place = new_temp();
             }
@@ -325,136 +701,27 @@
                 t->kids[1]->place = new_temp();
             }
             
-            // Generate assignment instruction
-            t->place = t->kids[0]->place;
-            struct instr *asn = gen(O_ASN, t->kids[0]->place, t->kids[1]->place, NULL_ADDR);
-            if (asn != NULL) {
-                t->code = concat(t->code, asn);
-            }
-        }
-        // Binary arithmetic operations
-        else if (strcmp(t->symbolname, "additive_expression") == 0 || 
-                 strcmp(t->symbolname, "subtractive_expression") == 0 ||
-                 strcmp(t->symbolname, "multiplicative_expression") == 0 ||
-                 strcmp(t->symbolname, "division_expression") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 2) {
-                fprintf(stderr, "Error: binary expression node has insufficient children\n");
-                return;
-            }
+            // Compute offset = index * elementSize (assuming 8 bytes)
+            struct addr elemSize;
+            elemSize.region = R_IMMED;
+            elemSize.u.offset = 8;
+            struct addr offsetTemp = new_temp();
+            struct instr *mulInst = gen(O_IMUL, offsetTemp, t->kids[1]->place, elemSize);
+            t->code = concat(t->code, mulInst);
             
-            // Ensure both operands have places
-            if (t->kids[0] == NULL || t->kids[1] == NULL) {
-                fprintf(stderr, "Error: NULL child in binary expression\n");
-                return;
-            }
-            
-            if (t->kids[0]->place.region == R_NONE) {
-                t->kids[0]->place = new_temp();
-            }
-            if (t->kids[1]->place.region == R_NONE) {
-                t->kids[1]->place = new_temp();
-            }
-            
-            // Generate arithmetic instruction based on operation type
-            int opcode;
-            if (strcmp(t->symbolname, "additive_expression") == 0) {
-                opcode = O_IADD;
-            } else if (strcmp(t->symbolname, "subtractive_expression") == 0) {
-                opcode = O_ISUB;
-            } else if (strcmp(t->symbolname, "multiplicative_expression") == 0) {
-                opcode = O_IMUL;
-            } else { // division_expression
-                opcode = O_IDIV;
-            }
-            
+            // Compute element address
             t->place = new_temp();
-            struct instr *arith = gen(opcode, t->place, t->kids[0]->place, t->kids[1]->place);
-            if (arith != NULL) {
-                t->code = concat(t->code, arith);
-            }
+            struct instr *addrInst = gen(O_ADDR, t->place, t->kids[0]->place, offsetTemp);
+            t->code = concat(t->code, addrInst);
+            
+            // Load the value at computed address
+            struct addr loadTemp = new_temp();
+            struct instr *loadInst = gen(O_LCONT, loadTemp, t->place, NULL_ADDR);
+            t->code = concat(t->code, loadInst);
+            t->place = loadTemp;
+            return;
         }
-        // Comparison operations
-        else if (strcmp(t->symbolname, "comparison") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 2) {
-                fprintf(stderr, "Error: comparison node has insufficient children\n");
-                return;
-            }
-            
-            // Ensure both operands have places
-            if (t->kids[0] == NULL || t->kids[1] == NULL) {
-                fprintf(stderr, "Error: NULL child in comparison\n");
-                return;
-            }
-            
-            if (t->kids[0]->place.region == R_NONE) {
-                t->kids[0]->place = new_temp();
-            }
-            if (t->kids[1]->place.region == R_NONE) {
-                t->kids[1]->place = new_temp();
-            }
-            
-            // Generate comparison instruction
-            t->place = new_temp();
-            struct instr *cmp = gen(O_IEQ, t->place, t->kids[0]->place, t->kids[1]->place);
-            if (cmp != NULL) {
-                t->code = concat(t->code, cmp);
-            }
-        }
-        // Unary negation
-        else if (strcmp(t->symbolname, "negation") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 1) {
-                fprintf(stderr, "Error: negation node has no child\n");
-                return;
-            }
-            
-            // Ensure operand has a place
-            if (t->kids[0] == NULL) {
-                fprintf(stderr, "Error: NULL child in negation\n");
-                return;
-            }
-            
-            if (t->kids[0]->place.region == R_NONE) {
-                t->kids[0]->place = new_temp();
-            }
-            
-            // Generate negation instruction
-            t->place = new_temp();
-            struct instr *neg = gen(O_NEG, t->place, t->kids[0]->place, NULL_ADDR);
-            if (neg != NULL) {
-                t->code = concat(t->code, neg);
-            }
-        }
-        // Function Call
-        else if (strcmp(t->symbolname, "functionCall") == 0) {
-            // Minimal required kids check
-            if (t->nkids < 1) {
-                fprintf(stderr, "Error: functionCall node has no function name\n");
-                return;
-            }
-            
-            // Ensure function name has a place
-            if (t->kids[0] == NULL) {
-                fprintf(stderr, "Error: NULL function name in functionCall\n");
-                return;
-            }
-            
-            if (t->kids[0]->place.region == R_NONE) {
-                t->kids[0]->place = new_temp();
-            }
-            
-            // Generate call instruction
-            t->place = new_temp();
-            struct instr *call = gen(O_CALL, t->place, t->kids[0]->place, NULL_ADDR);
-            if (call != NULL) {
-                t->code = concat(t->code, call);
-            }
-        }
-        // Add more node types as needed...
+            // ... other node handlers ...
     }
-    
-    // Default: no special processing needed
-    // The node's code is already set to the concatenated children's code
+    /* If no explicit rule applies, t->code remains the concatenation of its children’s code. */
 }

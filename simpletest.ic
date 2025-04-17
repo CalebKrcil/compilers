@@ -5,10 +5,19 @@
 /* global variable declarations */
 
 .code
-ASN	invalid:0, invalid:0, none:0
-ASN	invalid:0, invalid:0, none:0
-IADD	local:0, invalid:0, invalid:0
-ASN	invalid:0, local:0, none:0
-IADD	local:8, invalid:0, invalid:0
-ASN	invalid:0, local:8, none:0
-CALL	local:16, invalid:0, none:0
+LBL	invalid:0, none:0, none:0
+PUSH	none:0, fp:0, none:0
+ASN	fp:0, sp:0, none:0
+ALLOC	none:0, immed:24, none:0
+ASN	local:0, none:0, none:0
+ASN	local:8, none:0, none:0
+IADD	local:0, none:0, none:0
+ASN	local:16, local:0, none:0
+IADD	local:8, none:0, none:0
+ASN	none:0, local:8, none:0
+PARM	none:0, none:0, none:0
+CALL	local:16, none:0, none:0
+LBL	invalid:1, none:0, none:0
+DEALLOC	none:0, immed:24, none:0
+POP	fp:0, none:0, none:0
+RETURN	none:0, none:0, none:0
