@@ -1,6 +1,6 @@
 #include "tree.h"
 #include "k0gram.tab.h"
-#include "ytab.h"
+// #include "ytab.h"
 #include "symtab.h"
 #include "type.h"
 

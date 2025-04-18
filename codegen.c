@@ -38,6 +38,16 @@
  extern char *regionname(int i);
  extern char *opcodename(int i);
  extern char *pseudoname(int i);
+
+ typedef struct { char *label, *text; } StrLit;
+ static StrLit strtab[128];
+ static int   strcount = 0;
+ 
+ static void add_string_literal(const char *label, const char *text) {
+     strtab[strcount].label = strdup(label);
+     strtab[strcount].text  = strdup(text);
+     strcount++;
+ }
  
  /* Debug print function */
  static void debug_print(const char *format, ...) {
@@ -75,14 +85,21 @@
   *   Writes a single operand to the file in the format: region:offset.
   */
  static void output_operand(FILE *f, struct addr a) {
-     if (!f) return;
-     
-     if (a.region < R_NONE) {
-         fprintf(f, "invalid:%d", a.u.offset);
-     } else {
-         fprintf(f, "%s:%d", regionname(a.region), a.u.offset);
-     }
- }
+    if (!f) return;
+
+    // 1) uninitialized
+    if (a.region == R_NONE) {
+        fprintf(f, "none:%d", a.u.offset);
+    }
+    // 2) out‑of‑range -> definitely bogus
+    else if (a.region < R_GLOBAL || a.region > R_RET) {
+        fprintf(f, "invalid:%d", a.u.offset);
+    }
+    // 3) valid region name lookup
+    else {
+        fprintf(f, "%s:%d", regionname(a.region), a.u.offset);
+    }
+}
  
  /*
   * output_instruction
@@ -136,7 +153,10 @@
      printf("Intermediate code will be written to %s\n", output_filename);
      
      fprintf(f, ".string\n");
-     fprintf(f, "/* no string constants */\n\n");
+    for (int i = 0; i < strcount; i++) {
+        // print each literal label and its text
+        fprintf(f, "%s\t\"%s\"\n", strtab[i].label, strtab[i].text);
+    }
      
      fprintf(f, ".data\n");
      fprintf(f, "/* global variable declarations */\n\n");
@@ -189,6 +209,18 @@
   *   • Array creation
   */
  void generate_code(struct tree *t) {
+    fprintf(stderr,
+        "DEBUG: generate_code(%p): symbol=\"%s\" id=%d leaf=\"%s\" currentFunctionSymtab=%p\n",
+        t,
+        t && t->symbolname    ? t->symbolname    : "(none)",
+        t                        ? t->id            : -1,
+        t && t->leaf && t->leaf->text ? t->leaf->text : "(none)",
+        currentFunctionSymtab
+    );
+    if (currentFunctionSymtab == NULL) {
+        fprintf(stderr, "ERROR: no function symbol table – cannot generate code\n");
+        return;
+    }
     if (t == NULL) {
         fprintf(stderr, "Warning: generate_code called with NULL tree\n");
         return;
@@ -202,9 +234,15 @@
         switch (t->leaf->category) {
             case IntegerLiteral: {
                 printf("int literal\n");
-                t->place    = new_temp();
-                struct addr imm = { .region = R_IMMED, .u = { .offset = t->leaf->value.ival } };
-                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
+                // allocate a new temp for this literal
+                t->place = new_temp();
+                // build an immediate operand whose offset is the *actual* literal value
+                struct addr imm;
+                imm.region       = R_IMMED;
+                imm.u.offset     = t->leaf->value.ival;     // e.g. 1, 2, etc.
+                // emit the ASN temp, imm
+                struct instr *lit = gen(O_ASN, t->place, imm, NULL_ADDR);
+                t->code = concat(t->code, lit);
                 debug_print("LIT int %d -> %s:%d\n",
                             t->leaf->value.ival,
                             regionname(t->place.region), t->place.u.offset);
@@ -221,13 +259,19 @@
                 return;
             }
             case StringLiteral: {
-                printf("string literal\n");
-                t->place    = new_temp();
-                struct addr imm = { .region = R_IMMED, .u = { .offset = 0 } };
-                t->code = concat(t->code, gen(O_ASN, t->place, imm, NULL_ADDR));
-                debug_print("LIT str \"%s\" -> %s:%d\n",
-                            t->leaf->text,
-                            regionname(t->place.region), t->place.u.offset);
+                // uniquify a label
+                static int stringLabelCounter = 0;
+                char label[32];
+                snprintf(label, sizeof(label), "S%d", stringLabelCounter++);
+            
+                // record it in a small table for write_ic_file
+                add_string_literal(label, t->leaf->text);
+            
+                // this node’s “place” is that global string label
+                t->place.region   = R_GLOBAL;
+                t->place.u.offset = stringLabelCounter - 1;  // or store labelIndex
+            
+                // NO immediate assignment here
                 return;
             }
             case BooleanLiteral: {
@@ -242,8 +286,14 @@
                 return;
             }
             case Identifier: {
+                fprintf(stderr,
+                    "DEBUG: Identifier node: text=\"%s\", currentFunctionSymtab=%p\n",
+                    t->leaf->text,
+                    currentFunctionSymtab
+                );
                 printf("identifier\n");
                 SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
+                printf("after lookup\n");
                 if (e) {
                     t->place = e->location;
                     debug_print("ID '%s' -> %s:%d\n",
@@ -255,6 +305,7 @@
                                 t->leaf->text,
                                 regionname(t->place.region), t->place.u.offset);
                 }
+                printf("after if else\n");
                 return;
             }
             default:
@@ -290,32 +341,49 @@
     if (t->symbolname != NULL) {
                 // Variable Declaration
                 /* 1) Variable Declaration */
-        if (strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids >= 1) {
-            struct tree *id = t->kids[0];
+        if (strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids >= 3) {
+            struct tree *id   = t->kids[0];
+            struct tree *init = t->kids[2];
+        
+            // 1a) generate the initializer’s code first
+            if (init->place.region == R_NONE) {
+                generate_code(init);
+            }
+            // preserve the child’s code
+            t->code = concat(t->code, init->code);
+        
+            // 1b) now store it into the variable’s slot
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
             if (!entry) {
                 fprintf(stderr, "Error: variable '%s' not in symtab\n", id->leaf->text);
                 return;
             }
             t->place = entry->location;
-            /* initializer, if any */
-            if (t->nkids > 2 && t->kids[2]) {
-                if (t->kids[2]->place.region == R_NONE) generate_code(t->kids[2]);
-                t->code = concat(t->code,
-                    gen(O_ASN, t->place,
-                        t->kids[2]->place,
-                        NULL_ADDR));
-            }
+            t->code  = concat(t->code,
+                        gen(O_ASN, t->place,
+                            init->place,
+                            NULL_ADDR));
             return;
         }
 
         /* 2) Assignment */
         else if (strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
-            struct tree *lhs = t->kids[0], *rhs = t->kids[1];
-            if (rhs->place.region == R_NONE) generate_code(rhs);
+            struct tree *lhs = t->kids[0];
+            struct tree *rhs = t->kids[1];
+        
+            // generate RHS code first
+            if (rhs->place.region == R_NONE) {
+                generate_code(rhs);
+            }
+            // then reuse the LHS place if needed
+            // (lhs is typically a variableReference, whose .place was set during its leaf)
             t->place = lhs->place;
-            t->code  = concat(t->code,
-                        gen(O_ASN, lhs->place,
+        
+            // concatenate: <rhs code> ; ASN lhs, rhs
+            t->code = concat(t->code, rhs->code);
+            t->code = concat(t->code,
+                        gen(O_ASN,
+                            lhs->place,
                             rhs->place,
                             NULL_ADDR));
             return;
@@ -324,21 +392,22 @@
         /* 3) Binary arithmetic (add, sub, mul, div) */
         else if (strcmp(t->symbolname, "additive_expression") == 0 ||
                 strcmp(t->symbolname, "subtractive_expression") == 0 ||
-                strcmp(t->symbolname, "multiplicative_expression") == 0 ||
+                strcmp(t->symbolname, "multiplicative_expression")== 0 ||
                 strcmp(t->symbolname, "division_expression") == 0) {
-            /* force operands */
+            // left = kids[0], right = kids[1]
             if (t->kids[0]->place.region == R_NONE) generate_code(t->kids[0]);
             if (t->kids[1]->place.region == R_NONE) generate_code(t->kids[1]);
 
             int opcode;
-            if      (strcmp(t->symbolname, "additive_expression")==0)      opcode = O_IADD;
-            else if (strcmp(t->symbolname, "subtractive_expression")==0)   opcode = O_ISUB;
-            else if (strcmp(t->symbolname, "multiplicative_expression")==0)opcode = O_IMUL;
-            else                                                           opcode = O_IDIV;
+            if      (strcmp(t->symbolname, "additive_expression")==0)       opcode = O_IADD;
+            else if (strcmp(t->symbolname, "subtractive_expression")==0)    opcode = O_ISUB;
+            else if (strcmp(t->symbolname, "multiplicative_expression")==0) opcode = O_IMUL;
+            else                                                            opcode = O_IDIV;
 
             t->place = new_temp();
             t->code  = concat(t->code,
-                        gen(opcode, t->place,
+                        gen(opcode,
+                            t->place,
                             t->kids[0]->place,
                             t->kids[1]->place));
             return;
@@ -471,24 +540,34 @@
         }
 
         /* 9) Function Call */
-        else if (strcmp(t->symbolname, "functionCall") == 0 && t->nkids >= 1) {
-            /* push parameters */
-            if (t->nkids >= 2 && t->kids[1]) {
-                struct tree *args = t->kids[1];
-                for (int i=0; i<args->nkids; ++i) {
-                    if (args->kids[i]->place.region == R_NONE)
-                        generate_code(args->kids[i]);
-                    t->code = concat(t->code,
-                            gen(O_PARM, NULL_ADDR,
-                                args->kids[i]->place,
-                                NULL_ADDR));
+        else if (strcmp(t->symbolname, "functionCall") == 0 && t->nkids >= 2) {
+            struct tree *callee = t->kids[0];
+            struct tree *args   = t->kids[1];
+        
+            // gen code for the function expression (in case it's e.g. a field access)
+            if (callee->place.region == R_NONE) generate_code(callee);
+            t->code = concat(t->code, callee->code);
+        
+            // now for each argument
+            for (int i = 0; i < args->nkids; i++) {
+                struct tree *arg = args->kids[i];
+                if (arg->place.region == R_NONE) {
+                    generate_code(arg);
                 }
+                // push the temp into dest so it prints as local:XX
+                t->code = concat(t->code,
+                            gen(O_PARM,
+                                arg->place,   // dest = the argument temp
+                                NULL_ADDR,
+                                NULL_ADDR));
             }
-            /* emit call */
+        
+            // emit the call: dest=temp, src1=callee, src2=NULL
             t->place = new_temp();
             t->code  = concat(t->code,
-                        gen(O_CALL, t->place,
-                            t->kids[0]->place,
+                        gen(O_CALL,
+                            t->place,
+                            callee->place,
                             NULL_ADDR));
             return;
         }

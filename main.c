@@ -241,14 +241,14 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
             fprintf(stderr, "\nParsing completed with %d semantic error(s)\n", error_count);
             parse_result = 3;  
         }
+
+        generate_code(root);
+        write_ic_file(current_filename, root->code);
         
         free_func_symtab_list(func_symtabs);
     } else {
         fprintf(stderr, "\nParsing failed with %d error(s)\n", error_count);
     }
-
-    generate_code(root);
-    write_ic_file(current_filename, root->code);
 
     fclose(yyin);
     free(current_filename);

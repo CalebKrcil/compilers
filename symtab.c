@@ -91,8 +91,19 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int i
 
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
     if (!st) return NULL;
+    fprintf(stderr,
+        "DEBUG[lookup_symbol] st=%p parent=%p nBuckets=%d tbl=%p looking for '%s'\n",
+        (void*)st,
+        (void*)(st ? st->parent : NULL),
+        st ? st->nBuckets : -1,
+        (void*)(st ? st->tbl : NULL),
+        s);
     
     int index = hash(st, s);
+    // DEBUG TRACE: show the hashed index
+    fprintf(stderr,
+        "DEBUG[lookup_symbol] hash index = %d\n",
+        index);
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
         if (strcmp(entry->s, s) == 0) return entry;
@@ -310,43 +321,48 @@ void add_predefined_symbols(SymbolTable st) {
     insert_method_symbol(st, "java.lang.Math", "tan", typeptr_name("Double"), 1, trig_params);
 }
 
-void insert_method_symbol(SymbolTable st, char *class_name, char *method_name, 
-    typeptr return_type, int param_count, char **param_types) {
+void insert_method_symbol(SymbolTable st,
+                            char *class_name,
+                            char *method_name,
+                            typeptr return_type,
+                            int    param_count,
+                            char **param_types) {
     char full_name[256];
-    if (!strcmp(class_name, "")) {
-        sprintf(full_name, "%s", method_name);
+    if (class_name[0] == '\0') {
+        snprintf(full_name, sizeof(full_name), "%s", method_name);
     } else {
-        sprintf(full_name, "%s.%s", class_name, method_name);
+        snprintf(full_name, sizeof(full_name), "%s.%s", class_name, method_name);
     }
 
-    int index = hash(st, full_name);
-    SymbolTableEntry newEntry = malloc(sizeof(struct sym_entry));
-    if (!newEntry) {
-        fprintf(stderr, "Error: Memory allocation failed for symbol table entry\n");
-        exit(EXIT_FAILURE);
-    }
-
-    newEntry->s = strdup(full_name);
-    newEntry->kind = METHOD;
-
+    // 1) build the FuncType describing this method
     typeptr func_type = alctype(FUNC_TYPE);
     func_type->u.f.returntype = return_type;
-    func_type->u.f.nparams = param_count;
+    func_type->u.f.nparams     = param_count;
 
-    newEntry->type = func_type;
-    newEntry->param_count = param_count;
+    // 2) insert via insert_symbol so region/offset/mutable/nullable are set
+    insert_symbol(st,
+                full_name,
+                METHOD,       // or FUNCTION depending on your enum
+                func_type,
+                /*is_mutable=*/0,
+                /*is_nullable=*/0);
 
-    if (param_count > 0) {
-        newEntry->param_types = malloc(param_count * sizeof(typeptr));
-        for (int i = 0; i < param_count; i++) {
-            newEntry->param_types[i] = typeptr_name(param_types[i]);
-        }
-    } else {
-        newEntry->param_types = NULL;
+    // 3) retrieve it and fill in the param_types array
+    SymbolTableEntry e = lookup_symbol_current_scope(st, full_name);
+    if (!e) {
+        fprintf(stderr, "Internal error: builtin %s not found after insert\n",
+                full_name);
+        exit(1);
     }
 
-    newEntry->table = st;
-    newEntry->next = st->tbl[index];
-    st->tbl[index] = newEntry;
-    st->nEntries++;
+    e->param_count = param_count;
+    if (param_count > 0) {
+        e->param_types = malloc(param_count * sizeof(typeptr));
+    for (int i = 0; i < param_count; i++) {
+        // your param_types[] are string names, so re‑resolve them:
+        e->param_types[i] = typeptr_name(param_types[i]);
+    }
+    } else {
+        e->param_types = NULL;
+    }
 }
