@@ -339,20 +339,19 @@
     
     // Handle non-leaf nodes
     if (t->symbolname != NULL) {
-                // Variable Declaration
-                /* 1) Variable Declaration */
+        // Variable Declaration
+        /* 1) Variable Declaration */
         if (strcmp(t->symbolname, "variableDeclaration") == 0 && t->nkids >= 3) {
             struct tree *id   = t->kids[0];
             struct tree *init = t->kids[2];
         
-            // 1a) generate the initializer’s code first
+            // a) Generate the initializer’s code (preserves child code)
             if (init->place.region == R_NONE) {
                 generate_code(init);
             }
-            // preserve the child’s code
             t->code = concat(t->code, init->code);
         
-            // 1b) now store it into the variable’s slot
+            // b) Do the store into the variable’s slot
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
             if (!entry) {
                 fprintf(stderr, "Error: variable '%s' not in symtab\n", id->leaf->text);
@@ -360,7 +359,8 @@
             }
             t->place = entry->location;
             t->code  = concat(t->code,
-                        gen(O_ASN, t->place,
+                        gen(O_ASN,
+                            t->place,
                             init->place,
                             NULL_ADDR));
             return;
