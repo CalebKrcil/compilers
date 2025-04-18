@@ -1,33 +1,23 @@
 .string
 S0	""test""
-S1	""test""
 .data
 /* global variable declarations */
 
 .code
-LBL	label:0, none:0, none:0
+(null)	label:0, none:0, none:0
 PUSH	none:0, fp:0, none:0
 ASN	fp:0, sp:0, none:0
 ALLOC	none:0, immed:24, none:0
 ASN	local:0, immed:1, none:0
-ASN	local:8, immed:1, none:0
 ASN	local:0, none:0, none:0
-ASN	local:16, immed:2, none:0
-ASN	local:24, immed:2, none:0
+ASN	local:8, immed:2, none:0
 ASN	local:8, none:0, none:0
-IADD	local:32, none:0, none:0
-IADD	local:32, none:0, none:0
-ASN	local:16, local:32, none:0
-ASN	local:40, immed:1, none:0
-ASN	local:48, immed:4, none:0
-IADD	local:72, none:0, none:0
-ASN	local:40, immed:1, none:0
-ASN	local:48, immed:4, none:0
-IADD	local:72, none:0, none:0
-ASN	local:16, local:72, none:0
-PARM	none:0, none:0, none:0
-CALL	local:80, global:48, none:0
-LBL	label:1, none:0, none:0
+IADD	local:16, none:0, none:0
+ASN	local:16, local:16, none:0
+ASN	local:24, immed:1, none:0
+ASN	local:32, immed:4, none:0
+IADD	local:40, none:0, none:0
+ASN	local:16, local:40, none:0
+CALL	local:48, global:1760131312, none:0
 DEALLOC	none:0, immed:24, none:0
-POP	fp:0, none:0, none:0
 RETURN	none:0, none:0, none:0
