@@ -88,7 +88,11 @@
     if (!f) return;
 
     // 1) uninitialized
-    if (a.region == R_NONE) {
+    if (a.region == R_NAME && a.u.name) {
+        fprintf(f, "%s", a.u.name);
+        return;
+    }
+    else if (a.region == R_NONE) {
         fprintf(f, "none:%d", a.u.offset);
     }
     // 2) out‑of‑range -> definitely bogus
@@ -209,16 +213,19 @@
   *   • Array creation
   */
  void generate_code(struct tree *t) {
-    if (!t) {
-        debug_print("Called generate_code with NULL tree\n");
-        return;
-    }
+    if (!t) return;
 
-    debug_print("Processing node: %s\n", t->symbolname ? t->symbolname : "unnamed");
-    
-    /* Initialize */
+    debug_print("Processing node: %s\n", t->symbolname?t->symbolname:"unnamed");
     t->code  = NULL;
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
+
+    /* --- unwrap any single‐child literal wrapper nodes so leaf‐case fires --- */
+    if (!t->leaf && t->nkids == 1 && t->kids[0] && t->kids[0]->leaf) {
+        generate_code(t->kids[0]);
+        t->place = t->kids[0]->place;
+        t->code  = t->kids[0]->code;
+        return;
+    }
 
     /* Print detailed node info for debugging */
     if (t->leaf) {
@@ -584,11 +591,7 @@
             
             // Create function call
             t->place = new_temp();
-            struct addr func_addr = { .region = R_GLOBAL, .u.offset = 0 };
-            // If it's println, specify that
-            if (strcmp(func_name->leaf->text, "println") == 0) {
-                func_addr.u.name = strdup("println");
-            }
+            struct addr func_addr = { .region = R_NAME, .u.name = strdup(func_name->leaf->text) };
             
             struct instr *call = gen(O_CALL, t->place, func_addr, NULL_ADDR);
             all_code = concat(all_code, call);
