@@ -519,6 +519,227 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
+        else if (strcmp(t->symbolname, "while_statement") == 0 && t->nkids >= 2) {
+            struct tree *condition = t->kids[0];
+            struct tree *body = t->kids[1];
+            
+            // Generate labels if not already assigned
+            if (!t->first_used) {
+                struct addr *start_label = genlabel();
+                t->first = *start_label;
+                t->first_used = 1;
+                free(start_label);
+            }
+            
+            if (!condition->follow_used) {
+                struct addr *cond_false_label = genlabel();
+                condition->follow = *cond_false_label;
+                condition->follow_used = 1;
+                free(cond_false_label);
+            }
+            
+            // Generate code for condition with branching
+            generate_code(condition);
+            
+            // Start with the loop label
+            struct instr *loop_code = gen(D_LABEL, t->first, NULL_ADDR, NULL_ADDR);
+            
+            // Add the condition code
+            loop_code = concat(loop_code, condition->code);
+            
+            // Branch if condition is false (exit loop)
+            struct instr *branch_exit = gen(O_BZ, condition->follow, condition->place, NULL_ADDR);
+            loop_code = concat(loop_code, branch_exit);
+            
+            // Generate and add the loop body code
+            generate_code(body);
+            loop_code = concat(loop_code, body->code);
+            
+            // Add jump back to beginning of loop
+            struct instr *jump_back = gen(O_BR, t->first, NULL_ADDR, NULL_ADDR);
+            loop_code = concat(loop_code, jump_back);
+            
+            // Add the exit label
+            struct instr *exit_label = gen(D_LABEL, condition->follow, NULL_ADDR, NULL_ADDR);
+            loop_code = concat(loop_code, exit_label);
+            
+            t->code = loop_code;
+            return;
+        }
+        
+        /* -- if statement -- */
+        else if (strcmp(t->symbolname, "if_statement") == 0 && t->nkids >= 2) {
+            struct tree *condition = t->kids[0];
+            struct tree *then_clause = t->kids[1];
+            struct tree *else_clause = (t->nkids > 2) ? t->kids[2] : NULL;
+            
+            // Generate labels if not already assigned
+            if (!then_clause->first_used) {
+                struct addr *then_label = genlabel();
+                then_clause->first = *then_label;
+                then_clause->first_used = 1;
+                free(then_label);
+            }
+            
+            if (!t->follow_used) {
+                struct addr *end_label = genlabel();
+                t->follow = *end_label;
+                t->follow_used = 1;
+            }
+            
+            // Generate code for condition
+            generate_code(condition);
+            
+            // Start with condition code
+            struct instr *if_code = condition->code;
+            
+            if (else_clause) {
+                // If we have an else clause, generate its label
+                if (!else_clause->first_used) {
+                    struct addr *else_label = genlabel();
+                    else_clause->first = *else_label;
+                    else_clause->first_used = 1;
+                    free(else_label);
+                }
+                
+                // Branch to else if condition is false
+                struct instr *branch_else = gen(O_BZ, else_clause->first, condition->place, NULL_ADDR);
+                if_code = concat(if_code, branch_else);
+                
+                // Generate then clause code
+                generate_code(then_clause);
+                if_code = concat(if_code, then_clause->code);
+                
+                // Add jump to end after then clause
+                struct instr *jump_end = gen(O_BR, t->follow, NULL_ADDR, NULL_ADDR);
+                if_code = concat(if_code, jump_end);
+                
+                // Add else label
+                struct instr *else_label = gen(D_LABEL, else_clause->first, NULL_ADDR, NULL_ADDR);
+                if_code = concat(if_code, else_label);
+                
+                // Generate and add else code
+                generate_code(else_clause);
+                if_code = concat(if_code, else_clause->code);
+            } else {
+                // No else clause - branch to end if condition is false
+                struct instr *branch_end = gen(O_BZ, t->follow, condition->place, NULL_ADDR);
+                if_code = concat(if_code, branch_end);
+                
+                // Generate and add then code
+                generate_code(then_clause);
+                if_code = concat(if_code, then_clause->code);
+            }
+            
+            // Add end label
+            struct instr *end_label = gen(D_LABEL, t->follow, NULL_ADDR, NULL_ADDR);
+            if_code = concat(if_code, end_label);
+            
+            t->code = if_code;
+            return;
+        }
+        
+        /* -- logical_and expression -- */
+        else if (strcmp(t->symbolname, "logical_and") == 0 && t->nkids == 2) {
+            // Generate temporary for result
+            t->place = new_temp();
+            
+            // Generate labels
+            struct addr *false_label = genlabel();
+            struct addr *end_label = genlabel();
+            
+            // Generate code for left operand
+            generate_code(t->kids[0]);
+            
+            // Start building code
+            struct instr *and_code = t->kids[0]->code;
+            
+            // If left operand is false, short-circuit
+            struct instr *branch_false = gen(O_BZ, *false_label, t->kids[0]->place, NULL_ADDR);
+            and_code = concat(and_code, branch_false);
+            
+            // Generate code for right operand
+            generate_code(t->kids[1]);
+            and_code = concat(and_code, t->kids[1]->code);
+            
+            // Copy right result to output
+            struct instr *copy_result = gen(O_ASN, t->place, t->kids[1]->place, NULL_ADDR);
+            and_code = concat(and_code, copy_result);
+            
+            // Jump to end
+            struct instr *jump_end = gen(O_BR, *end_label, NULL_ADDR, NULL_ADDR);
+            and_code = concat(and_code, jump_end);
+            
+            // False label - set result to 0
+            struct instr *false_instr = gen(D_LABEL, *false_label, NULL_ADDR, NULL_ADDR);
+            and_code = concat(and_code, false_instr);
+            
+            struct addr zero = { .region = R_IMMED, .u.offset = 0 };
+            struct instr *set_false = gen(O_ASN, t->place, zero, NULL_ADDR);
+            and_code = concat(and_code, set_false);
+            
+            // End label
+            struct instr *end_instr = gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR);
+            and_code = concat(and_code, end_instr);
+            
+            t->code = and_code;
+            free(false_label);
+            free(end_label);
+            return;
+        }
+        
+        /* -- logical_or expression -- */
+        else if (strcmp(t->symbolname, "logical_or") == 0 && t->nkids == 2) {
+            // Generate temporary for result
+            t->place = new_temp();
+            
+            // Generate labels
+            struct addr *true_label = genlabel();
+            struct addr *end_label = genlabel();
+            
+            // Generate code for left operand
+            generate_code(t->kids[0]);
+            
+            // Start building code
+            struct instr *or_code = t->kids[0]->code;
+            
+            // If left operand is true, short-circuit
+            struct addr one = { .region = R_IMMED, .u.offset = 1 };
+            struct instr *comp_true = gen(O_INE, t->place, t->kids[0]->place, one);
+            or_code = concat(or_code, comp_true);
+            
+            struct instr *branch_true = gen(O_BNZ, *true_label, t->place, NULL_ADDR);
+            or_code = concat(or_code, branch_true);
+            
+            // Generate code for right operand
+            generate_code(t->kids[1]);
+            or_code = concat(or_code, t->kids[1]->code);
+            
+            // Copy right result to output
+            struct instr *copy_result = gen(O_ASN, t->place, t->kids[1]->place, NULL_ADDR);
+            or_code = concat(or_code, copy_result);
+            
+            // Jump to end
+            struct instr *jump_end = gen(O_BR, *end_label, NULL_ADDR, NULL_ADDR);
+            or_code = concat(or_code, jump_end);
+            
+            // True label - set result to 1
+            struct instr *true_instr = gen(D_LABEL, *true_label, NULL_ADDR, NULL_ADDR);
+            or_code = concat(or_code, true_instr);
+            
+            struct instr *set_true = gen(O_ASN, t->place, one, NULL_ADDR);
+            or_code = concat(or_code, set_true);
+            
+            // End label
+            struct instr *end_instr = gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR);
+            or_code = concat(or_code, end_instr);
+            
+            t->code = or_code;
+            free(true_label);
+            free(end_label);
+            return;
+        }
+
         else if (strcmp(t->symbolname, "functionCall")==0 && t->nkids >= 1) {
             struct tree *func_name = t->kids[0];
             if (!func_name || !func_name->leaf) {

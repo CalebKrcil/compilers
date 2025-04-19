@@ -5,7 +5,7 @@ S1	""test""
 /* global variable declarations */
 
 .code
-(null)    label:0           none:0            none:0          
+(null)    label:2           none:0            none:0          
 PUSH      none:0            fp:0              none:0          
 ASN       fp:0              sp:0              none:0          
 ALLOC     none:0            immed:80          none:0          

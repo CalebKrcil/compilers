@@ -39,6 +39,14 @@ struct tree {
     SymbolTable scope;
     struct addr place;
     struct instr *code;
+    struct addr first;     // Entry label for this node
+    struct addr follow;    // Exit label for this node
+    struct addr onTrue;    // Branch target when condition is true
+    struct addr onFalse;   // Branch target when condition is false
+    int first_used;        // Flag indicating if first is used
+    int follow_used;       // Flag indicating if follow is used
+    int onTrue_used;       // Flag indicating if onTrue is used
+    int onFalse_used;      // Flag indicating if onFalse is used
 };
 
 typedef struct func_symtab_list {
