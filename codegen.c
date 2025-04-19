@@ -84,54 +84,46 @@
   * output_operand
   *   Writes a single operand to the file in the format: region:offset.
   */
- static void output_operand(FILE *f, struct addr a) {
-    if (!f) return;
-
-    // 1) uninitialized
+static void format_operand(struct addr a, char *buf, size_t sz) {
     if (a.region == R_NAME && a.u.name) {
-        fprintf(f, "%s", a.u.name);
-        return;
+        // print the function name (or any name region)
+        snprintf(buf, sz, "%s", a.u.name);
     }
     else if (a.region == R_NONE) {
-        fprintf(f, "none:%d", a.u.offset);
+        snprintf(buf, sz, "none:%d", a.u.offset);
     }
-    // 2) out‑of‑range -> definitely bogus
     else if (a.region < R_GLOBAL || a.region > R_RET) {
-        fprintf(f, "invalid:%d", a.u.offset);
+        snprintf(buf, sz, "invalid:%d", a.u.offset);
     }
-    // 3) valid region name lookup
     else {
-        fprintf(f, "%s:%d", regionname(a.region), a.u.offset);
+        snprintf(buf, sz, "%s:%d",
+                 regionname(a.region),
+                 a.u.offset);
     }
 }
- 
+
  /*
   * output_instruction
   *   Writes a single TAC instruction to the file.
   *   The format is: <opcode> <dest>, <src1>, <src2>
   */
  static void output_instruction(FILE *f, struct instr *instr) {
-     if (!f || !instr) {
-         debug_print("DEBUG: output_instruction called with NULL parameter\n");
-         return;
-     }
-     
-     debug_print("DEBUG: output_instruction: opcode=%d, dest.region=%d, src1.region=%d, src2.region=%d\n",
-                 instr->opcode, instr->dest.region, instr->src1.region, instr->src2.region);
-     
-     if (instr->opcode < 0) {
-         debug_print("WARNING: Invalid opcode %d\n", instr->opcode);
-         return;
-     }
-     
-     fprintf(f, "%s\t", opcodename(instr->opcode));
-     output_operand(f, instr->dest);
-     fprintf(f, ", ");
-     output_operand(f, instr->src1);
-     fprintf(f, ", ");
-     output_operand(f, instr->src2);
-     fprintf(f, "\n");
- }
+    if (!f || !instr) return;
+
+    char destbuf[32], src1buf[32], src2buf[32];
+
+    // render each operand into a string
+    format_operand(instr->dest,  destbuf, sizeof destbuf);
+    format_operand(instr->src1, src1buf, sizeof src1buf);
+    format_operand(instr->src2, src2buf, sizeof src2buf);
+
+    // fixed‑width columns: opcode (8 cols), then each operand (16 cols)
+    fprintf(f, "%-8s  %-16s  %-16s  %-16s\n",
+            opcodename(instr->opcode),
+            destbuf,
+            src1buf,
+            src2buf);
+}
  
  /*
   * write_ic_file
@@ -312,49 +304,12 @@
     /* 2) Special‑cases (in order) */
     if (t->symbolname) {
         /* -- variableDeclaration -- */
-        if (strcmp(t->symbolname, "variableDeclaration")==0 && t->nkids>=3) {
-            struct tree *id = t->kids[0];
-            struct tree *init = t->kids[2];
-            
-            // Force generate code for initializer
-            if (init) generate_code(init);
-            
-            // Debug output to see what's happening
-            debug_print("Variable declaration: %s, initializer place: %s:%d\n", 
-                        id->leaf->text, 
-                        init ? regionname(init->place.region) : "none",
-                        init ? init->place.u.offset : -1);
-            
-            // Look up variable in symbol table
-            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
-            if (!entry) {
-                fprintf(stderr, "ERROR: Variable '%s' not in symbol table\n", id->leaf->text);
-                return;
-            }
-            
-            t->place = entry->location;
-            
-            // Generate assignment regardless of initializer (for debugging)
-            if (init) {
-                struct instr *assign = gen(O_ASN,
-                                          entry->location,
-                                          init->place,
-                                          NULL_ADDR);
-                debug_print("Generated variable assignment: %s:%d = %s:%d\n",
-                           regionname(entry->location.region), entry->location.u.offset,
-                           regionname(init->place.region), init->place.u.offset);
-                t->code = concat(init->code, assign);
-            } else {
-                // Even without initializer, create an empty assignment for debugging
-                struct addr zero = { .region = R_IMMED, .u.offset = 0 };
-                t->code = gen(O_ASN, entry->location, zero, NULL_ADDR);
-            }
-            return;
-        }
-        
+        fprintf(stderr,"NODE: symbolname=%s, prodrule=%d\n",
+            t->symbolname? t->symbolname:"(null)",
+            t->prodrule);
 
         /* -- assignment -- */
-        else if (strcmp(t->symbolname, "assignment")==0 && t->nkids == 2) {
+        if (strcmp(t->symbolname, "assignment")==0 && t->nkids == 2) {
             struct tree *lhs = t->kids[0]; 
             struct tree *rhs = t->kids[1];
             
@@ -514,26 +469,31 @@
         }
 
         /* -- comparison (<,>,<=,>=,==,!=) -- */
-        else if (strcmp(t->symbolname, "comparison")==0 && t->nkids>=3) {
+        else if (strcmp(t->symbolname, "comparison")==0 && t->nkids==2) {
+            // generate code for both operands
             generate_code(t->kids[0]);
-            generate_code(t->kids[2]);
-
-            int opcode = O_IEQ;
-            char *op = t->kids[1]->leaf->text;
-            if      (strcmp(op,"<")==0)  opcode = O_ILT;
-            else if (strcmp(op,">")==0)  opcode = O_IGT;
-            else if (strcmp(op,"<=")==0) opcode = O_ILE;
-            else if (strcmp(op,">=")==0) opcode = O_IGE;
-            else if (strcmp(op,"!=")==0) opcode = O_INE;
-
-            struct instr *both = concat(t->kids[0]->code,
-                                        t->kids[2]->code);
+            generate_code(t->kids[1]);
+        
+            // pick the right opcode based on the production (or symbolname/prodrule)
+            int opcode;
+            // if you have access to t->prodrule constants for '>' and '<':
+            if      (t->prodrule == RANGLE) opcode = O_IGT;
+            else if (t->prodrule == LANGLE) opcode = O_ILT;
+            else if (t->prodrule == GE) opcode = O_IGE;
+            else if (t->prodrule == LE) opcode = O_ILE;
+            else if (t->prodrule == EQEQ) opcode = O_IEQ;
+            else if (t->prodrule == EXCL_EQ) opcode = O_INE;
+            else                                    opcode = O_IGT;  // fallback
+        
+            // stitch their code together, emit the compare, and return
             t->place = new_temp();
-            t->code  = concat(both,
-                        gen(opcode,
-                            t->place,
-                            t->kids[0]->place,
-                            t->kids[2]->place));
+            t->code  = concat(
+                          concat(t->kids[0]->code, t->kids[1]->code),
+                          gen(opcode,
+                              t->place,
+                              t->kids[0]->place,
+                              t->kids[1]->place)
+                       );
             return;
         }
 
@@ -658,6 +618,46 @@
             
             debug_print("DEBUG: Generated function '%s' with frame size %d\n", 
                        t->kids[0]->leaf->text, frameSize);
+            return;
+        }
+
+        else if (strcmp(t->symbolname, "variableDeclaration")==0 && t->nkids>=3) {
+            struct tree *id = t->kids[0];
+            struct tree *init = t->kids[2];
+            
+            // Force generate code for initializer
+            if (init) generate_code(init);
+            
+            // Debug output to see what's happening
+            debug_print("Variable declaration: %s, initializer place: %s:%d\n", 
+                        id->leaf->text, 
+                        init ? regionname(init->place.region) : "none",
+                        init ? init->place.u.offset : -1);
+            
+            // Look up variable in symbol table
+            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
+            if (!entry) {
+                fprintf(stderr, "ERROR: Variable '%s' not in symbol table\n", id->leaf->text);
+                return;
+            }
+            
+            t->place = entry->location;
+            
+            // Generate assignment regardless of initializer (for debugging)
+            if (init) {
+                struct instr *assign = gen(O_ASN,
+                                          entry->location,
+                                          init->place,
+                                          NULL_ADDR);
+                debug_print("Generated variable assignment: %s:%d = %s:%d\n",
+                           regionname(entry->location.region), entry->location.u.offset,
+                           regionname(init->place.region), init->place.u.offset);
+                t->code = concat(init->code, assign);
+            } else {
+                // Even without initializer, create an empty assignment for debugging
+                struct addr zero = { .region = R_IMMED, .u.offset = 0 };
+                t->code = gen(O_ASN, entry->location, zero, NULL_ADDR);
+            }
             return;
         }
     }
