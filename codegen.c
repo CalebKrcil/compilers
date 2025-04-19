@@ -33,7 +33,8 @@
  extern struct addr *genlabel(void);
  extern struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3);
  extern struct instr *concat(struct instr *l1, struct instr *l2);
- 
+static struct addr *current_break_label = NULL;
+
  /* External functions from tac.c */
  extern char *regionname(int i);
  extern char *opcodename(int i);
@@ -257,13 +258,26 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             case StringLiteral: {
                 static int stringLabelCounter = 0;
+            
+                // Deduplicate string literals
+                for (int i = 0; i < strcount; i++) {
+                    if (strcmp(strtab[i].text, t->leaf->text) == 0) {
+                        t->place.region = R_GLOBAL;
+                        t->place.u.offset = i;
+                        return;
+                    }
+                }
+            
+                // New string literal
                 char label[32];
-                snprintf(label, sizeof(label), "S%d", stringLabelCounter++);
+                snprintf(label, sizeof(label), "S%d", stringLabelCounter);
+                t->place.region = R_GLOBAL;
+                t->place.u.offset = stringLabelCounter;
                 add_string_literal(label, t->leaf->text);
-                t->place.region   = R_GLOBAL;
-                t->place.u.offset = stringLabelCounter - 1;
+                stringLabelCounter++;
                 return;
             }
+            
             case BooleanLiteral: {
                 printf("boolean literal\n");
                 t->place = new_temp();
@@ -568,74 +582,54 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
         
         /* -- if statement -- */
-        else if (strcmp(t->symbolname, "if_statement") == 0 && t->nkids >= 2) {
-            struct tree *condition = t->kids[0];
-            struct tree *then_clause = t->kids[1];
-            struct tree *else_clause = (t->nkids > 2) ? t->kids[2] : NULL;
-            
-            // Generate labels if not already assigned
-            if (!then_clause->first_used) {
-                struct addr *then_label = genlabel();
-                then_clause->first = *then_label;
-                then_clause->first_used = 1;
-                free(then_label);
-            }
-            
-            if (!t->follow_used) {
-                struct addr *end_label = genlabel();
-                t->follow = *end_label;
-                t->follow_used = 1;
-            }
-            
-            // Generate code for condition
-            generate_code(condition);
-            
-            // Start with condition code
-            struct instr *if_code = condition->code;
-            
-            if (else_clause) {
-                // If we have an else clause, generate its label
-                if (!else_clause->first_used) {
-                    struct addr *else_label = genlabel();
-                    else_clause->first = *else_label;
-                    else_clause->first_used = 1;
-                    free(else_label);
-                }
-                
-                // Branch to else if condition is false
-                struct instr *branch_else = gen(O_BZ, else_clause->first, condition->place, NULL_ADDR);
-                if_code = concat(if_code, branch_else);
-                
-                // Generate then clause code
-                generate_code(then_clause);
-                if_code = concat(if_code, then_clause->code);
-                
-                // Add jump to end after then clause
-                struct instr *jump_end = gen(O_BR, t->follow, NULL_ADDR, NULL_ADDR);
-                if_code = concat(if_code, jump_end);
-                
-                // Add else label
-                struct instr *else_label = gen(D_LABEL, else_clause->first, NULL_ADDR, NULL_ADDR);
-                if_code = concat(if_code, else_label);
-                
-                // Generate and add else code
-                generate_code(else_clause);
-                if_code = concat(if_code, else_clause->code);
-            } else {
-                // No else clause - branch to end if condition is false
-                struct instr *branch_end = gen(O_BZ, t->follow, condition->place, NULL_ADDR);
-                if_code = concat(if_code, branch_end);
-                
-                // Generate and add then code
-                generate_code(then_clause);
-                if_code = concat(if_code, then_clause->code);
-            }
-            
-            // Add end label
-            struct instr *end_label = gen(D_LABEL, t->follow, NULL_ADDR, NULL_ADDR);
-            if_code = concat(if_code, end_label);
-            
-            t->code = if_code;
+        else if (strcmp(t->symbolname, "ifStatement") == 0 && t->nkids == 2) {
+            struct tree *cond = t->kids[0];
+            struct tree *then_stmt = t->kids[1];
+        
+            struct addr *end_label = genlabel();
+            struct instr *code = NULL;
+        
+            generate_code(cond);
+            code = concat(code, cond->code);
+        
+            // cond->place must hold the boolean result
+            code = concat(code, gen(O_BZ, *end_label, cond->place, NULL_ADDR));
+        
+            generate_code(then_stmt);
+            code = concat(code, then_stmt->code);
+        
+            code = concat(code, gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR));
+        
+            t->code = code;
+            return;
+        }
+        else if (strcmp(t->symbolname, "ifElseStatement") == 0 && t->nkids == 3) {
+            printf("DEBUG: Entering ifElseStatement\n");
+
+            struct tree *cond = t->kids[0];
+            struct tree *then_branch = t->kids[1];
+            struct tree *else_branch = t->kids[2];
+        
+            struct addr *else_label = genlabel();
+            struct addr *end_label = genlabel();
+        
+            struct instr *code = NULL;
+        
+            generate_code(cond);
+            code = concat(code, cond->code);
+            code = concat(code, gen(O_BZ, *else_label, cond->place, NULL_ADDR));
+        
+            generate_code(then_branch);
+            code = concat(code, then_branch->code);
+            code = concat(code, gen(O_BR, *end_label, NULL_ADDR, NULL_ADDR));
+        
+            code = concat(code, gen(D_LABEL, *else_label, NULL_ADDR, NULL_ADDR));
+            generate_code(else_branch);
+            code = concat(code, else_branch->code);
+        
+            code = concat(code, gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR));
+        
+            t->code = code;
             return;
         }
         
@@ -739,47 +733,111 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             free(end_label);
             return;
         }
-
+        else if (strcmp(t->symbolname, "comparison") == 0 && t->nkids == 2) {
+            struct tree *lhs = t->kids[0];
+            struct tree *rhs = t->kids[1];
+        
+            generate_code(lhs);
+            generate_code(rhs);
+        
+            struct instr *code = NULL;
+            code = concat(lhs->code, rhs->code);
+        
+            struct addr tmp = new_temp();
+        
+            const char *op = t->leaf ? t->leaf->text : NULL;
+        
+            if (op) {
+                if (strcmp(op, "<") == 0)
+                    code = concat(code, gen(O_ILT, tmp, lhs->place, rhs->place));
+                else if (strcmp(op, "<=") == 0)
+                    code = concat(code, gen(O_ILE, tmp, lhs->place, rhs->place));
+                else if (strcmp(op, ">") == 0)
+                    code = concat(code, gen(O_IGT, tmp, lhs->place, rhs->place));
+                else if (strcmp(op, ">=") == 0)
+                    code = concat(code, gen(O_IGE, tmp, lhs->place, rhs->place));
+                else {
+                    fprintf(stderr, "ERROR: unknown comparison op %s\n", op);
+                    return;
+                }
+            }
+        
+            t->code = code;
+            t->place = tmp;
+            return;
+        }
+        else if (strcmp(t->symbolname, "equality") == 0 && t->nkids == 2) {
+            struct tree *lhs = t->kids[0];
+            struct tree *rhs = t->kids[1];
+        
+            generate_code(lhs);
+            generate_code(rhs);
+        
+            struct instr *code = NULL;
+            code = concat(lhs->code, rhs->code);
+        
+            struct addr tmp = new_temp();
+        
+            const char *op = t->leaf ? t->leaf->text : NULL;
+            printf("Equality operator: [%s]\n", op ? op : "NULL");
+                    
+            if (op) {
+                if (strcmp(op, "==") == 0 || strcmp(op, "===") == 0)
+                    code = concat(code, gen(O_IEQ, tmp, lhs->place, rhs->place));
+                else if (strcmp(op, "!=") == 0)
+                    code = concat(code, gen(O_INE, tmp, lhs->place, rhs->place));
+                else {
+                    fprintf(stderr, "ERROR: unknown equality op: %s\n", op);
+                    return;
+                }
+            }
+        
+            t->code = code;
+            t->place = tmp;
+            return;
+        }       
         else if (strcmp(t->symbolname, "functionCall")==0 && t->nkids >= 1) {
             struct tree *func_name = t->kids[0];
             if (!func_name || !func_name->leaf) {
                 fprintf(stderr, "Function call without function name\n");
                 return;
             }
-            
-            debug_print("Function call to: %s\n", func_name->leaf->text);
-            
-            // Process all arguments first
+        
+            // Get the resolved function address
+            SymbolTableEntry fentry = lookup_symbol(currentFunctionSymtab, func_name->leaf->text);
+            if (!fentry) {
+                fprintf(stderr, "ERROR: unknown function '%s'\n", func_name->leaf->text);
+                return;
+            }
+        
+            struct addr func_addr = fentry->location;  // Use actual global:XX location
+        
             struct instr *all_code = NULL;
+        
+            // Generate code for all arguments and emit O_PARM
             for (int i = 1; i < t->nkids; i++) {
                 if (t->kids[i]) {
-                    generate_code(t->kids[i]);
+                    generate_code(t->kids[i]);  // This sets .place and .code
                     all_code = concat(all_code, t->kids[i]->code);
-                    
-                    // Generate parameter passing code
+        
                     if (t->kids[i]->place.region != R_NONE) {
-                        struct instr *param = gen(O_PARM, 
-                                                 NULL_ADDR, 
-                                                 t->kids[i]->place, 
-                                                 NULL_ADDR);
+                        struct instr *param = gen(O_PARM, NULL_ADDR, t->kids[i]->place, NULL_ADDR);
                         all_code = concat(all_code, param);
-                        debug_print("Added parameter from %s:%d\n", 
-                                   regionname(t->kids[i]->place.region),
-                                   t->kids[i]->place.u.offset);
+                    } else {
+                        fprintf(stderr, "WARNING: argument %d has R_NONE region\n", i);
                     }
                 }
             }
-            
-            // Create function call
+        
+            // Now emit the CALL using the resolved addr
             t->place = new_temp();
-            struct addr func_addr = { .region = R_NAME, .u.name = strdup(func_name->leaf->text) };
-            
             struct instr *call = gen(O_CALL, t->place, func_addr, NULL_ADDR);
             all_code = concat(all_code, call);
-            
+        
             t->code = all_code;
             return;
         }
+        
 
         /* -- functionDeclaration (prologue/body/epilogue) -- */
         else if (strcmp(t->symbolname, "functionDeclaration")==0) {
@@ -881,6 +939,146 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             return;
         }
+
+        else if (strcmp(t->symbolname, "forStatementKotlinRange") == 0 && t->nkids == 4) {
+            struct tree *loopVar = t->kids[0];     // Identifier (e.g., i)
+            struct tree *startExpr = t->kids[1];   // expression (start)
+            struct tree *endExpr = t->kids[2];     // expression (end)
+            struct tree *body = t->kids[3];        // loop body
+        
+            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, loopVar->leaf->text);
+            if (!entry) {
+                fprintf(stderr, "ERROR: loop variable %s not found\n", loopVar->leaf->text);
+                return;
+            }
+        
+            struct addr i_addr = entry->location;
+        
+            generate_code(startExpr);
+            generate_code(endExpr);
+        
+            struct instr *all_code = NULL;
+            all_code = concat(all_code, startExpr->code);
+            all_code = concat(all_code, endExpr->code);
+        
+            // i = start
+            all_code = concat(all_code, gen(O_ASN, i_addr, startExpr->place, NULL_ADDR));
+        
+            struct addr *loop_start = genlabel();
+            struct addr *loop_end = genlabel();
+        
+            struct instr *label_loop = gen(D_LABEL, *loop_start, NULL_ADDR, NULL_ADDR);
+            all_code = concat(all_code, label_loop);
+        
+            // cond: i <= end
+            struct addr cond_result = new_temp();
+            all_code = concat(all_code, gen(O_ILE, cond_result, i_addr, endExpr->place));
+            all_code = concat(all_code, gen(O_BZ, *loop_end, cond_result, NULL_ADDR));
+        
+            // Generate loop body
+            generate_code(body);
+            all_code = concat(all_code, body->code);
+        
+            // i = i + 1
+            struct addr one = { .region = R_IMMED, .u.offset = 1 };
+            struct addr inc_result = new_temp();
+            all_code = concat(all_code, gen(O_IADD, inc_result, i_addr, one));
+            all_code = concat(all_code, gen(O_ASN, i_addr, inc_result, NULL_ADDR));
+        
+            // Loop jump
+            all_code = concat(all_code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
+            all_code = concat(all_code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
+        
+            t->code = all_code;
+            return;
+        }
+        else if (strcmp(t->symbolname, "forStatement") == 0 && t->nkids == 4) {
+            struct tree *init     = t->kids[0]; // i = 0
+            struct tree *cond     = t->kids[1]; // i < 5
+            struct tree *update   = t->kids[2]; // i = i + 1
+            struct tree *body     = t->kids[3]; // { ... }
+        
+            generate_code(init);
+            generate_code(cond);
+            generate_code(update);
+        
+            struct instr *code = NULL;
+            code = concat(code, init->code); // emit init once
+        
+            struct addr *loop_start = genlabel();
+            struct addr *loop_end = genlabel();
+        
+            // LBL loop_start:
+            code = concat(code, gen(D_LABEL, *loop_start, NULL_ADDR, NULL_ADDR));
+        
+            // cond
+            code = concat(code, cond->code);
+            code = concat(code, gen(O_BZ, *loop_end, cond->place, NULL_ADDR));
+        
+            // Setup break context
+            struct addr *prev_break = current_break_label;
+            current_break_label = loop_end;
+        
+            // body
+            generate_code(body);
+            code = concat(code, body->code);
+        
+            current_break_label = prev_break; // restore outer loop break label
+        
+            // update
+            code = concat(code, update->code);
+        
+            // BR loop_start
+            code = concat(code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
+            code = concat(code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
+        
+            t->code = code;
+            return;
+        }
+        else if (strcmp(t->symbolname, "whileStatement") == 0 && t->nkids == 2) {
+            struct tree *cond = t->kids[0];
+            struct tree *body = t->kids[1];
+        
+            generate_code(cond);
+        
+            struct addr *loop_start = genlabel();
+            struct addr *loop_end = genlabel();
+        
+            struct instr *code = NULL;
+        
+            code = concat(code, gen(D_LABEL, *loop_start, NULL_ADDR, NULL_ADDR));
+        
+            generate_code(cond);
+            code = concat(code, cond->code);
+        
+            code = concat(code, gen(O_BZ, *loop_end, cond->place, NULL_ADDR));
+        
+            // Manage break label
+            struct addr *prev_break_label = current_break_label;
+            current_break_label = loop_end;
+        
+            generate_code(body);
+            code = concat(code, body->code);
+        
+            current_break_label = prev_break_label;
+        
+            // jump back to loop start
+            code = concat(code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
+            code = concat(code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
+        
+            t->code = code;
+            return;
+        }
+        
+        else if (strcmp(t->symbolname, "breakStatement") == 0) {
+            if (!current_break_label) {
+                fprintf(stderr, "ERROR: 'break' used outside of loop.\n");
+                return;
+            }
+            t->code = gen(O_BR, *current_break_label, NULL_ADDR, NULL_ADDR);
+            return;
+        }
+        
     }
 
     /* 3) Fallback: generic postorder traversal */

@@ -311,9 +311,15 @@ conjunction:
 
 equality:
     comparison { $$ = $1; }
-    | equality EQEQ comparison { $$ = alctree(EQEQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
+    | equality EQEQ comparison {
+        $$ = alctree(EQEQ, "equality", 2, $1, $3);
+        $$->leaf = $2->leaf;
+    }
     | equality EQEQEQ comparison { $$ = alctree(EQEQEQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
-    | equality EXCL_EQ comparison { $$ = alctree(EXCL_EQ, "equality", 2, $1, $3); $$->type = boolean_typeptr; }
+    | equality EXCL_EQ comparison {
+        $$ = alctree(EXCL_EQ, "equality", 2, $1, $3);
+        $$->leaf = $2->leaf;
+    }
     ;
 
 comparison:

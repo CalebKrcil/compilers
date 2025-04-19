@@ -3,5 +3,9 @@ fun main() {
     var b: Int = 2
     var c: Int = a + b
     c = 1 + 4
-    println("test")
+    var x: Int = 1
+    if (x < 3) {
+        c = c + 1
+    }
+
 }
