@@ -101,12 +101,16 @@ SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
     
     int index = hash(st, s);
     // DEBUG TRACE: show the hashed index
-    fprintf(stderr,
-        "DEBUG[lookup_symbol] hash index = %d\n",
-        index);
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
-        if (strcmp(entry->s, s) == 0) return entry;
+        if (strcmp(entry->s, s) == 0){
+            char *type_str = (entry->type ? typename(entry->type) : "(none)");
+            fprintf(stderr,
+                "DEBUG[lookup_symbol] hash index = %d type=%s\n",
+                index, 
+                type_str);
+            return entry;
+        }
         entry = entry->next;
     }
     return st->parent ? lookup_symbol(st->parent, s) : NULL;

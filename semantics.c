@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "semantics.h"
-#include "ytab.h"
+#include "k0gram.tab.h"
 #include "type.h"
 
 extern int error_count;
@@ -37,12 +37,13 @@ int check_type_compatibility(typeptr expected, typeptr actual) {
 }
 
 int is_operator(int prodrule) {
+    printf("DEBUG: Checking if prodrule %d is an operator\n", prodrule);
     switch (prodrule) {
-        case 114: /* additive_expression with ADD */
-        case 115: /* additive_expression with SUB */
-        case 118: /* multiplicative_expression with MULT */
-        case 119: /* multiplicative_expression with DIV */
-        case 120: /* multiplicative_expression with MOD */
+        case ADD: /* additive_expression with ADD */
+        case SUB: /* additive_expression with SUB */
+        case MULT: /* multiplicative_expression with MULT */
+        case DIV: /* multiplicative_expression with DIV */
+        case MOD: /* multiplicative_expression with MOD */
             return 1;
         default:
             return 0;
@@ -143,7 +144,8 @@ int is_null_literal(struct tree *t) {
 void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
         return;
-
+    fprintf(stderr, "DEBUG: check_semantics_helper called for node: %s\n", 
+            t->symbolname ? t->symbolname : "NULL");
     if (t->symbolname &&
        (strcmp(t->symbolname, "variableDeclaration") == 0 ||
         strcmp(t->symbolname, "constVariableDeclaration") == 0)) {
@@ -446,6 +448,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     }
 
     if (is_operator(t->prodrule)) {
+        printf("DEBUG: Operator node at line %d, prodrule %d\n", t->lineno, t->prodrule);
         if (t->kids[0]->symbolname && strcmp(t->kids[0]->symbolname, "Identifier") == 0 && !t->kids[0]->type) {
             char *idText = (t->kids[0]->leaf && t->kids[0]->leaf->text) ? t->kids[0]->leaf->text : NULL;
             if (idText) {
@@ -470,10 +473,18 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         typeptr left = t->kids[0]->type;
         typeptr right = t->kids[1]->type;
         int prod = t->prodrule;
+
+        fprintf(stderr,
+            "DEBUG[op=%d,line=%d]: left=%s(%d), right=%s(%d)\n",
+            prod,
+            t->lineno,
+            left  ? typename(left)  : "NULL",  left  ? left->basetype  : -1,
+            right ? typename(right) : "NULL",  right ? right->basetype : -1
+        );
         
-        if (prod == 114 || prod == 115) {
+        if (prod == ADD || prod == SUB) {
             // If either operand is a string, treat the operation as string concatenation.
-            if (prod == 114 && (check_type_compatibility(left, string_typeptr) ||
+            if (prod == ADD && (check_type_compatibility(left, string_typeptr) ||
                 check_type_compatibility(right, string_typeptr))) {
                 t->type = string_typeptr;
             }
@@ -490,7 +501,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 report_semantic_error("Invalid operands for addition", t->lineno);
             }
         }
-        else if (prod == 118 || prod == 119 || prod == 120) {
+        else if (prod == MULT || prod == DIV || prod == MOD) {
             if (check_type_compatibility(left, integer_typeptr) &&
                 check_type_compatibility(right, integer_typeptr)) {
                 t->type = integer_typeptr;

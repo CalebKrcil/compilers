@@ -558,8 +558,8 @@ primary_expression:
         if (entry && entry->type) {
             $$->type = entry->type;
         } else {
-            $$->type = null_typeptr;
-            fprintf(stderr, "DEBUG: Identifier '%s' has no type (line %d)\n", $1->leaf->text, $1->leaf->lineno);
+            // $$->type = null_typeptr;
+            // fprintf(stderr, "DEBUG: Identifier '%s' has no type (line %d)\n", $1->leaf->text, $1->leaf->lineno);
         }
     }
     | primary_expression LSQUARE expression RSQUARE { 
