@@ -3,28 +3,15 @@
 /* global variable declarations */
 
 .code
-(null)    label:2           none:0            none:0          
+prot      label:0           none:0            none:0          
 PUSH      none:0            fp:0              none:0          
 ASN       fp:0              sp:0              none:0          
-ALLOC     none:0            immed:32          none:0          
+ALLOC     none:0            immed:24          none:0          
 ASN       local:0           immed:1           none:0          
 ASN       local:0           local:0           none:0          
 ASN       local:8           immed:2           none:0          
 ASN       local:8           local:8           none:0          
-IADD      local:16          local:0           local:8         
+IMUL      local:16          local:0           local:8         
 ASN       local:16          local:16          none:0          
-ASN       local:24          immed:1           none:0          
-ASN       local:32          immed:4           none:0          
-IADD      local:40          local:24          local:32        
-ASN       local:16          local:40          none:0          
-ASN       local:48          immed:1           none:0          
-ASN       local:24          local:48          none:0          
-ASN       local:56          immed:3           none:0          
-ILT       local:64          local:24          local:56        
-BZ        label:3           local:64          none:0          
-ASN       local:72          immed:1           none:0          
-IADD      local:80          local:16          local:72        
-ASN       local:16          local:80          none:0          
-(null)    label:3           none:0            none:0          
-DEALLOC   none:0            immed:32          none:0          
+DEALLOC   none:0            immed:24          none:0          
 RETURN    none:0            none:0            none:0          

@@ -8,6 +8,9 @@
     int yylex(void);
     void yyerror(const char *s);
     struct tree *root;
+    extern SymbolTable globalSymtab;
+    extern SymbolTable currentFunctionSymtab;
+
 %}
 
 %token <treeptr> RESERVED DOT COMMA LPAREN RPAREN LSQUARE RSQUARE
@@ -374,58 +377,68 @@ variableDeclaration:
          $$ = alctree(VAL, "variableDeclaration", 2, $2, $4);
          $$->is_mutable = 0;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | VAR Identifier ASSIGNMENT boolExpression nl_opt {
          $$ = alctree(VAR, "variableDeclaration", 2, $2, $4);
          $$->is_mutable = 1;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | CONST VAL Identifier ASSIGNMENT boolExpression nl_opt {
          $$ = alctree(CONST, "constVariableDeclaration", 2, $3, $5);
          $$->is_mutable = 0;
          $$->type = $5->type;
+         $3->type = $5->type;
     }
     | VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
          $$ = alctree(VAL, "variableDeclaration", 3, $2, $4, $6);
          $$->is_mutable = 0;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | VAR Identifier COLON type ASSIGNMENT boolExpression nl_opt {
          $$ = alctree(VAR, "variableDeclaration", 3, $2, $4, $6);
          $$->is_mutable = 1;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | CONST VAL Identifier COLON type ASSIGNMENT boolExpression nl_opt {
          $$ = alctree(CONST, "constVariableDeclaration", 3, $3, $5, $7);
          $$->is_mutable = 0;
          $$->is_nullable = $5->is_nullable;
          $$->type = $5->type;
+         $3->type = $5->type;
     }
     | VAL Identifier COLON type arrayInitializer nl_opt {
          $$ = alctree(VAR, "arrayDeclaration", 3, $2, $4, $5);
          $$->is_mutable = 0;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | VAR Identifier COLON type arrayInitializer nl_opt {
          $$ = alctree(VAR, "arrayDeclaration", 3, $2, $4, $5);
          $$->is_mutable = 1;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | VAR Identifier COLON type ASSIGNMENT Identifier LANGLE type RANGLE arrayInitializer nl_opt {
          $$ = alctree(VAR, "arrayAssignmentDeclaration", 5, $2, $4, $6, $8, $10);
          $$->is_mutable = 1;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     | VAL Identifier COLON type ASSIGNMENT Identifier LANGLE type RANGLE arrayInitializer nl_opt {
          $$ = alctree(VAL, "arrayAssignmentDeclaration", 5, $2, $4, $6, $8, $10);
          $$->is_mutable = 0;
          $$->is_nullable = $4->is_nullable;
          $$->type = $4->type;
+         $2->type = $4->type;
     }
     ;
 
@@ -451,23 +464,25 @@ expression:
 
 additive_expression:
     multiplicative_expression { $$ = $1; }
-    | additive_expression ADD multiplicative_expression { 
-          $$ = alctree(114, "additive_expression", 2, $1, $3);
-          if (check_type_compatibility($1->type, $3->type))
-              $$->type = $1->type;
-          else {
-              $$->type = double_typeptr;
-          }
-      }
-    | additive_expression SUB multiplicative_expression { 
-          $$ = alctree(115, "additive_expression", 2, $1, $3);
-          if (check_type_compatibility($1->type, $3->type))
-              $$->type = $1->type;
-          else {
-              $$->type = double_typeptr;
-          }
-      }
-    ;
+
+    | additive_expression ADD multiplicative_expression {
+        $$ = alctree(114, "additive_expression", 2, $1, $3);
+        $$->prodrule = ADD;  
+        if (check_type_compatibility($1->type, $3->type))
+            $$->type = $1->type;
+        else
+            $$->type = double_typeptr;
+    }
+
+    | additive_expression SUB multiplicative_expression {
+        $$ = alctree(115, "additive_expression", 2, $1, $3);
+        $$->prodrule = SUB; 
+        if (check_type_compatibility($1->type, $3->type))
+            $$->type = $1->type;
+        else
+            $$->type = double_typeptr;
+    }
+
 
 expressionList:
     expression { $$ = alctree(116, "expressionList", 1, $1); }
@@ -476,31 +491,41 @@ expressionList:
 
 multiplicative_expression:
     logical_unary_expression { $$ = $1; }
-    | multiplicative_expression MULT logical_unary_expression { 
-          $$ = alctree(118, "multiplicative_expression", 2, $1, $3);
-          if (check_type_compatibility($1->type, $3->type))
-              $$->type = $1->type;
-          else {
-              $$->type = double_typeptr;
-          }
-      }
-    | multiplicative_expression DIV logical_unary_expression { 
-          $$ = alctree(119, "multiplicative_expression", 2, $1, $3);
-          if (check_type_compatibility($1->type, $3->type))
-              $$->type = $1->type;
-          else {
-              $$->type = double_typeptr;
-          }
-      }
-    | multiplicative_expression MOD logical_unary_expression { 
-          $$ = alctree(120, "multiplicative_expression", 2, $1, $3);
-          if (check_type_compatibility($1->type, $3->type))
-              $$->type = $1->type;
-          else {
-              $$->type = double_typeptr;
-          }
-      }
-    ;
+
+    | multiplicative_expression MULT logical_unary_expression {
+        $$ = alctree(118, "multiplicative_expression", 2, $1, $3);
+        $$->prodrule = MULT;
+
+        // 🪵 Debug print types
+        fprintf(stderr, "DEBUG: MULT types => left: %s, right: %s\n",
+                $1->type ? typename($1->type) : "(NULL)",
+                $3->type ? typename($3->type) : "(NULL)");
+
+        if (check_type_compatibility($1->type, $3->type))
+            $$->type = $1->type;
+        else
+            $$->type = double_typeptr;
+    }
+
+
+    | multiplicative_expression DIV logical_unary_expression {
+        $$ = alctree(119, "multiplicative_expression", 2, $1, $3);
+        $$->prodrule = DIV;  
+        if (check_type_compatibility($1->type, $3->type))
+            $$->type = $1->type;
+        else
+            $$->type = double_typeptr;
+    }
+
+    | multiplicative_expression MOD logical_unary_expression {
+        $$ = alctree(120, "multiplicative_expression", 2, $1, $3);
+        $$->prodrule = MOD;  
+        if (check_type_compatibility($1->type, $3->type))
+            $$->type = $1->type;
+        else
+            $$->type = double_typeptr;
+    }
+
 
 primary_expression:
     IntegerLiteral { 
@@ -523,9 +548,19 @@ primary_expression:
          $$ = alctree(StringLiteral, "StringLiteral", 1, $1); 
          $$->type = string_typeptr; 
     }
-    | Identifier { 
-         $$ = alctree(Identifier, "Identifier", 1, $1); 
-         $$->type = NULL;
+    | Identifier {
+        $$ = alctree(Identifier, "Identifier", 1, $1);
+
+        SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, $1->leaf->text);
+        if (!entry && globalSymtab)
+            entry = lookup_symbol(globalSymtab, $1->leaf->text);
+
+        if (entry && entry->type) {
+            $$->type = entry->type;
+        } else {
+            $$->type = null_typeptr;
+            fprintf(stderr, "DEBUG: Identifier '%s' has no type (line %d)\n", $1->leaf->text, $1->leaf->lineno);
+        }
     }
     | primary_expression LSQUARE expression RSQUARE { 
          $$ = alctree(300, "arrayAccess", 2, $1, $3); 

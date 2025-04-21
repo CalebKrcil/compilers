@@ -90,6 +90,8 @@ struct instr {
 #define O_POP     3042   /* pop from stack into register */
 #define O_ALLOC   3043   /* allocate locals (stack frame) */
 #define O_DEALLOC 3044   /* deallocate locals */
+#define O_IMOD    3045
+#define O_DMOD    4046
 /* declarations/pseudo instructions */
 #define D_GLOB  3051
 #define D_PROC  3052

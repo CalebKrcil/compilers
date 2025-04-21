@@ -27,6 +27,7 @@
  #define DEBUG_OUTPUT 1  // Set to 1 to enable debug output, 0 to disable
  
  extern SymbolTable currentFunctionSymtab;
+ extern SymbolTable globalSymtab;
 
  /* External function prototypes from tac.c */
  extern struct addr new_temp(void);
@@ -330,6 +331,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             // Handle direct identifier on left side
             if (lhs->leaf && lhs->leaf->category == Identifier) {
                 SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, lhs->leaf->text);
+                
                 if (!entry) {
                     fprintf(stderr, "ERROR: Variable '%s' not found in symbol table\n", 
                             lhs->leaf->text);
@@ -365,122 +367,53 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /* -- additive_expression -- */
-        else if (strcmp(t->symbolname, "additive_expression")==0 && t->nkids>=2) {
-            // Force evaluate both sides
+        else if (strcmp(t->symbolname, "additive_expression") == 0 && t->nkids == 2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
-            
-            // Debug what we have
-            debug_print("Additive expression: left=%s:%d, right=%s:%d\n",
-                       regionname(t->kids[0]->place.region), t->kids[0]->place.u.offset,
-                       regionname(t->kids[1]->place.region), t->kids[1]->place.u.offset);
-            
-            // Create a temporary for result
+
+            int opcode;
+            if      (t->prodrule == ADD) opcode = O_IADD;
+            else if (t->prodrule == SUB) opcode = O_ISUB;
+            else                         opcode = O_IADD;  // fallback
+
             t->place = new_temp();
-            
-            // Generate the addition instruction directly
-            struct instr *add_instr = gen(O_IADD, 
-                                         t->place,
-                                         t->kids[0]->place,
-                                         t->kids[1]->place);
-            
-            // Explicitly print what we generated
-            debug_print("Generated IADD: %s:%d = %s:%d + %s:%d\n",
-                       regionname(t->place.region), t->place.u.offset,
-                       regionname(t->kids[0]->place.region), t->kids[0]->place.u.offset,
-                       regionname(t->kids[1]->place.region), t->kids[1]->place.u.offset);
-            
-            // Be very explicit about concatenation
-            struct instr *left_code = t->kids[0]->code;
-            struct instr *right_code = t->kids[1]->code;
-            struct instr *combined = NULL;
-            
-            if (left_code) {
-                combined = left_code;
-                // Find the end of the left code list
-                struct instr *end = left_code;
-                while (end && end->next) end = end->next;
-                
-                // Manually attach right code
-                if (end && right_code) end->next = right_code;
-            } else {
-                combined = right_code;
-            }
-            
-            // Now manually attach add instruction
-            if (combined) {
-                struct instr *end = combined;
-                while (end && end->next) end = end->next;
-                if (end) end->next = add_instr;
-                else combined = add_instr;
-            } else {
-                combined = add_instr;
-            }
-            
-            t->code = combined;
+            t->code  = concat(
+                          concat(t->kids[0]->code, t->kids[1]->code),
+                          gen(opcode,
+                              t->place,
+                              t->kids[0]->place,
+                              t->kids[1]->place)
+                       );
             return;
         }
+
         
-        /*
-         * Similarly, fix the subtractive_expression, multiplicative_expression,
-         * and division_expression handlers
-         */
-        
-        /* -- subtractive_expression -- */
-        else if (strcmp(t->symbolname, "subtractive_expression")==0 && t->nkids>=2) {
-            if (t->kids[0]) generate_code(t->kids[0]);
-            if (t->kids[1]) generate_code(t->kids[1]);
-            
-            if (!t->kids[0] || !t->kids[1] || 
-                t->kids[0]->place.region == R_NONE || 
-                t->kids[1]->place.region == R_NONE) {
-                fprintf(stderr, "ERROR: Invalid operands in subtractive expression\n");
-                t->place = new_temp();
-                return;
-            }
-            
-            struct instr *both = concat(t->kids[0]->code, t->kids[1]->code);
-            t->place = new_temp();
-            t->code = concat(both, 
-                            gen(O_ISUB,
-                                t->place,
-                                t->kids[0]->place,
-                                t->kids[1]->place));
-            return;
-        }
 
         /* -- multiplicative_expression -- */
-        else if (strcmp(t->symbolname, "multiplicative_expression")==0 && t->nkids>=2) {
+        else if (strcmp(t->symbolname, "multiplicative_expression") == 0 && t->nkids == 2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
-
-            struct instr *both = concat(t->kids[0]->code,
-                                        t->kids[1]->code);
+        
+            int opcode;
+            if (t->type == double_typeptr) {
+                if (t->prodrule == MULT) opcode = O_DMUL;
+                else if (t->prodrule == DIV) opcode = O_DDIV;
+                else opcode = O_DMOD; // optional, if float mod is supported
+            } else {
+                if (t->prodrule == MULT) opcode = O_IMUL;
+                else if (t->prodrule == DIV) opcode = O_IDIV;
+                else opcode = O_IMOD;
+            }
+        
             t->place = new_temp();
-            t->code  = concat(both,
-                        gen(O_IMUL,
-                            t->place,
-                            t->kids[0]->place,
-                            t->kids[1]->place));
+            t->code = concat(
+                concat(t->kids[0]->code, t->kids[1]->code),
+                gen(opcode, t->place, t->kids[0]->place, t->kids[1]->place)
+            );
             return;
         }
+        
 
-        /* -- division_expression -- */
-        else if (strcmp(t->symbolname, "division_expression")==0 && t->nkids>=2) {
-            generate_code(t->kids[0]);
-            generate_code(t->kids[1]);
-
-            struct instr *both = concat(t->kids[0]->code,
-                                        t->kids[1]->code);
-            t->place = new_temp();
-            t->code  = concat(both,
-                        gen(O_IDIV,
-                            t->place,
-                            t->kids[0]->place,
-                            t->kids[1]->place));
-            return;
-        }
 
         /* -- comparison (<,>,<=,>=,==,!=) -- */
         else if (strcmp(t->symbolname, "comparison")==0 && t->nkids==2) {
@@ -806,6 +739,10 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             // Get the resolved function address
             SymbolTableEntry fentry = lookup_symbol(currentFunctionSymtab, func_name->leaf->text);
             if (!fentry) {
+                fentry = lookup_symbol(globalSymtab, func_name->leaf->text);  // Fallback to global scope
+            }
+                        
+            if (!fentry) {
                 fprintf(stderr, "ERROR: unknown function '%s'\n", func_name->leaf->text);
                 return;
             }
@@ -899,7 +836,13 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                        t->kids[0]->leaf->text, frameSize);
             return;
         }
-
+        else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
+            generate_code(t->kids[0]);  // The expression being returned
+            t->place = t->kids[0]->place; // Optional: store the return value in place
+            t->code = concat(t->kids[0]->code,
+                             gen(O_RET, NULL_ADDR, t->kids[0]->place, NULL_ADDR));
+            return;
+        }
         else if (strcmp(t->symbolname, "variableDeclaration")==0 && t->nkids>=3) {
             struct tree *id = t->kids[0];
             struct tree *init = t->kids[2];
