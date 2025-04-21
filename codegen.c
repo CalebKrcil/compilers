@@ -24,7 +24,7 @@
  #include "symtab.h"
  
  #define NULL_ADDR ((struct addr){R_NONE, {.offset = 0}})
- #define DEBUG_OUTPUT 1  // Set to 1 to enable debug output, 0 to disable
+ #define DEBUG_OUTPUT 0  // Set to 1 to enable debug output, 0 to disable
  
  extern SymbolTable currentFunctionSymtab;
  extern SymbolTable globalSymtab;
@@ -50,6 +50,23 @@ static struct addr *current_break_label = NULL;
      strtab[strcount].text  = strdup(text);
      strcount++;
  }
+
+ static void flattenExprList(struct tree *elist, struct tree ***outArgs, int *outCount) {
+    if (!elist) return;
+    if (elist->symbolname && strcmp(elist->symbolname, "expressionList") == 0) {
+        // two‐child node: (expressionList COMMA expression) or single child
+        if (elist->nkids == 1) {
+            flattenExprList(elist->kids[0], outArgs, outCount);
+        } else {
+            flattenExprList(elist->kids[0], outArgs, outCount);
+            flattenExprList(elist->kids[1], outArgs, outCount);
+        }
+    } else {
+        *outArgs = realloc(*outArgs, sizeof(struct tree*) * (*outCount + 1));
+        (*outArgs)[*outCount] = elist;
+        (*outCount)++;
+    }
+}
  
  /* Debug print function */
  static void debug_print(const char *format, ...) {
@@ -729,111 +746,86 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->place = tmp;
             return;
         }       
-        else if (strcmp(t->symbolname, "functionCall")==0 && t->nkids >= 1) {
-            struct tree *func_name = t->kids[0];
-            if (!func_name || !func_name->leaf) {
-                fprintf(stderr, "Function call without function name\n");
-                return;
-            }
+        else if (strcmp(t->symbolname, "functionCall")==0) {
+            // 0) find the function’s address
+            struct tree *fnNode = t->kids[0];
+            SymbolTableEntry fe = lookup_symbol(globalSymtab, fnNode->leaf->text);
+            if (!fe) fe = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
+            struct addr func_addr = fe->location;
         
-            // Get the resolved function address
-            SymbolTableEntry fentry = lookup_symbol(currentFunctionSymtab, func_name->leaf->text);
-            if (!fentry) {
-                fentry = lookup_symbol(globalSymtab, func_name->leaf->text);  // Fallback to global scope
-            }
-                        
-            if (!fentry) {
-                fprintf(stderr, "ERROR: unknown function '%s'\n", func_name->leaf->text);
-                return;
-            }
-        
-            struct addr func_addr = fentry->location;  // Use actual global:XX location
-        
-            struct instr *all_code = NULL;
-        
-            // Generate code for all arguments and emit O_PARM
+            // 1) flatten *all* argument subtrees
+            struct instr *code = NULL;
+            struct tree **args = NULL;
+            int argc = 0;
             for (int i = 1; i < t->nkids; i++) {
-                if (t->kids[i]) {
-                    generate_code(t->kids[i]);  // This sets .place and .code
-                    all_code = concat(all_code, t->kids[i]->code);
-        
-                    if (t->kids[i]->place.region != R_NONE) {
-                        struct instr *param = gen(O_PARM, NULL_ADDR, t->kids[i]->place, NULL_ADDR);
-                        all_code = concat(all_code, param);
-                    } else {
-                        fprintf(stderr, "WARNING: argument %d has R_NONE region\n", i);
-                    }
-                }
+                flattenExprList(t->kids[i], &args, &argc);
             }
         
-            // Now emit the CALL using the resolved addr
-            t->place = new_temp();
-            struct instr *call = gen(O_CALL, t->place, func_addr, NULL_ADDR);
-            all_code = concat(all_code, call);
+            // 2) for each real argument: generate it, then emit one PARM
+            for (int i = 0; i < argc; i++) {
+                generate_code(args[i]);
+                code = concat(code, args[i]->code);
+                code = concat(code, gen(O_PARM, NULL_ADDR, args[i]->place, NULL_ADDR));
+            }
+            free(args);
         
-            t->code = all_code;
+            // 3) fresh temp for return
+            t->place = new_temp();
+        
+            // 4) emit the CALL
+            code = concat(code, gen(O_CALL, t->place, func_addr, NULL_ADDR));
+            t->code = code;
             return;
         }
         
 
         /* -- functionDeclaration (prologue/body/epilogue) -- */
-        else if (strcmp(t->symbolname, "functionDeclaration")==0) {
+        else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
             if (t->nkids < 3 || t->kids[2] == NULL) {
                 fprintf(stderr, "ERROR: functionDeclaration node has only %d kids; expected 3\n",
                         t->nkids);
                 return;
             }
-            
-            // Generate a proper label for the function
+        
+            /* 1) Generate a label for the function entry */
             struct addr label_addr = *genlabel();
-            // Make sure the label is properly created
-            struct instr *label_instr = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
-            // Debug to verify label creation
-            debug_print("Generated label: %d\n", label_addr.u.offset);
-            t->code = label_instr;  // Start with the label
-            
-            // 1) Generate the body first
+            t->code = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
+        
+            /* 2) Generate the function body code */
             struct tree *bodyNode = t->kids[2];
             generate_code(bodyNode);
             struct instr *bodyCode = bodyNode->code;
-            
-            // 2) Compute stack frame size
+        
+            /* 3) Compute the stack frame size (at least 8 bytes) */
             int frameSize = currentFunctionSymtab->nextOffset;
-            if (frameSize == 0) frameSize = 8; // Minimum frame size
-            
-            // 3) Prologue
-            t->code = NULL;
+            if (frameSize == 0) frameSize = 8;
+        
+            /* 4) Prologue */
             t->code = concat(t->code,
-                           gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR));
+                gen(O_PUSH, NULL_ADDR,
+                    (struct addr){ .region = R_FP,    .u.offset = 0 },
+                    NULL_ADDR));
             t->code = concat(t->code,
-                           gen(O_PUSH, NULL_ADDR, 
-                              (struct addr){ .region=R_FP, .u.offset=0 }, 
-                              NULL_ADDR));
+                gen(O_ASN,
+                    (struct addr){ .region = R_FP,    .u.offset = 0 },
+                    (struct addr){ .region = R_SP,    .u.offset = 0 },
+                    NULL_ADDR));
             t->code = concat(t->code,
-                           gen(O_ASN,
-                              (struct addr){ .region=R_FP, .u.offset=0 },
-                              (struct addr){ .region=R_SP, .u.offset=0 },
-                              NULL_ADDR));
-            t->code = concat(t->code,
-                           gen(O_ALLOC,
-                              NULL_ADDR,
-                              (struct addr){ .region=R_IMMED, .u.offset=frameSize },
-                              NULL_ADDR));
-            
-            // 4) The user's function body
+                gen(O_ALLOC, NULL_ADDR,
+                    (struct addr){ .region = R_IMMED, .u.offset = frameSize },
+                    NULL_ADDR));
+        
+            /* 5) User’s function body */
             t->code = concat(t->code, bodyCode);
-            
-            // 5) Epilogue
+        
+            /* 6) Epilogue */
             t->code = concat(t->code,
-                           gen(O_DEALLOC,
-                              NULL_ADDR,
-                              (struct addr){ .region=R_IMMED, .u.offset=frameSize },
-                              NULL_ADDR));
+                gen(O_DEALLOC, NULL_ADDR,
+                    (struct addr){ .region = R_IMMED, .u.offset = frameSize },
+                    NULL_ADDR));
             t->code = concat(t->code,
-                           gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
-            
-            debug_print("DEBUG: Generated function '%s' with frame size %d\n", 
-                       t->kids[0]->leaf->text, frameSize);
+                gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
+        
             return;
         }
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
