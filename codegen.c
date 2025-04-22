@@ -415,7 +415,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             if (t->type == double_typeptr) {
                 if (t->prodrule == MULT) opcode = O_DMUL;
                 else if (t->prodrule == DIV) opcode = O_DDIV;
-                else opcode = O_DMOD; // optional, if float mod is supported
+                else opcode = O_DMOD; 
             } else {
                 if (t->prodrule == MULT) opcode = O_IMUL;
                 else if (t->prodrule == DIV) opcode = O_IDIV;
@@ -823,6 +823,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 gen(O_DEALLOC, NULL_ADDR,
                     (struct addr){ .region = R_IMMED, .u.offset = frameSize },
                     NULL_ADDR));
+            
             t->code = concat(t->code,
                 gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
         
@@ -830,11 +831,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
             generate_code(t->kids[0]);  // The expression being returned
-            t->place = t->kids[0]->place; // Optional: store the return value in place
+            t->place = t->kids[0]->place;
             t->code = concat(t->kids[0]->code,
                              gen(O_RET, NULL_ADDR, t->kids[0]->place, NULL_ADDR));
             return;
         }
+        
         else if (strcmp(t->symbolname, "variableDeclaration")==0 && t->nkids>=3) {
             struct tree *id = t->kids[0];
             struct tree *init = t->kids[2];
@@ -1033,4 +1035,5 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
     }
     t->code = children_code;
+    
 }

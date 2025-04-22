@@ -36,12 +36,12 @@ ASN       local:56          immed:1           none:0
 PARM      none:0            local:56          none:0          
 ASN       local:64          immed:2           none:0          
 PARM      none:0            local:64          none:0          
-ASN       local:72          immed:3           none:0          
-PARM      none:0            local:72          none:0          
-CALL      local:80          local:8           none:0          
+CALL      local:72          local:8           none:0          
+ASN       local:16          local:72          none:0          
 PARM      none:0            local:0           none:0          
 PARM      none:0            local:8           none:0          
-PARM      none:0            local:16          none:0          
-CALL      local:88          local:8           none:0          
+CALL      local:80          local:8           none:0          
+PARM      none:0            local:80          none:0          
+CALL      local:88          global:48         none:0          
 DEALLOC   none:0            immed:24          none:0          
 RETURN    none:0            none:0            none:0          

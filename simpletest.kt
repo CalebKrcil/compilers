@@ -3,8 +3,9 @@ fun silly(meow: String) {
     return
 }
 
-fun multiple_args(a: Int, b: Int, c: Int): Int {
-    return a + b + c
+fun multiple_args(a: Int, b: Int): Int{
+    var c : Int = a+b
+    return c
 }
 
 fun main() {
@@ -13,7 +14,7 @@ fun main() {
     var c: Int = a*b
     println("meow")
     silly("meow")
-    multiple_args(1, 2, 3)
-    multiple_args(a, b, c)
+    c = multiple_args(1, 2)
+    println(multiple_args(a, b))
     return;
 }
