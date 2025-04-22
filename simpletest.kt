@@ -14,7 +14,7 @@ fun main() {
     var c: Int = a*b
     println("meow")
     silly("meow")
-    c = multiple_args(1, 2)
+    var d: Int = multiple_args(1, 2)
     println(multiple_args(a, b))
     return;
 }

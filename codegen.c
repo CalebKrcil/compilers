@@ -226,6 +226,8 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
  void generate_code(struct tree *t) {
     if (!t) return;
 
+    t->returned = 0;
+
     debug_print("Processing node: %s\n", t->symbolname?t->symbolname:"unnamed");
     t->code  = NULL;
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
@@ -792,96 +794,119 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
 
         /* -- functionDeclaration (prologue/body/epilogue) -- */
-        else if (strcmp(t->symbolname, "functionDeclaration")==0) {
-            if (t->nkids < 3 || !t->kids[2]) {
-                fprintf(stderr, "ERROR: functionDeclaration has %d kids\n", t->nkids);
+        else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
+            // push the old function symtab and switch into this one
+            SymbolTable oldSymtab = currentFunctionSymtab;
+            currentFunctionSymtab = t->scope;
+        
+            // generate and register the code label
+            struct addr label_addr = *genlabel();
+            SymbolTableEntry fentry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
+            if (fentry) fentry->location = label_addr;
+        
+            // prologue: label, push FP, set FP=SP, alloc frame
+            t->code = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
+            t->code = concat(t->code,
+                             gen(O_PUSH, NULL_ADDR,
+                                 (struct addr){ .region=R_FP, .u.offset=0 }, NULL_ADDR));
+            t->code = concat(t->code,
+                             gen(O_ASN, (struct addr){ .region=R_FP, .u.offset=0 },
+                                 (struct addr){ .region=R_SP, .u.offset=0 }, NULL_ADDR));
+            t->code = concat(t->code,
+                             gen(O_ALLOC, NULL_ADDR,
+                                 (struct addr){ .region=R_IMMED, .u.offset=currentFunctionSymtab->nextOffset }, NULL_ADDR));
+        
+            // find the block child (function body)
+            struct tree *body = NULL;
+            for (int i = 0; i < t->nkids; i++) {
+                if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block") == 0) {
+                    body = t->kids[i];
+                    break;
+                }
+            }
+            if (!body) {
+                currentFunctionSymtab = oldSymtab;
                 return;
             }
-    
-            // create a unique entry label
-            struct addr label_addr = *genlabel();
-    
-            // compute frame size
-            int frameSize = currentFunctionSymtab->nextOffset;
-            if (frameSize == 0) frameSize = 8;
-    
-            // --- prologue ---
-            t->code = NULL;
-            t->code = concat(t->code,
-                gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR));
-            t->code = concat(t->code,
-                gen(O_PUSH,  NULL_ADDR,
-                    (struct addr){ .region = R_FP,    .u.offset = 0 },
-                    NULL_ADDR));
-            t->code = concat(t->code,
-                gen(O_ASN,
-                    (struct addr){ .region = R_FP, .u.offset = 0 },
-                    (struct addr){ .region = R_SP, .u.offset = 0 },
-                    NULL_ADDR));
-            t->code = concat(t->code,
-                gen(O_ALLOC, NULL_ADDR,
-                    (struct addr){ .region = R_IMMED, .u.offset = frameSize },
-                    NULL_ADDR));
-    
-            // --- body ---
-            generate_code(t->kids[2]);                  // recurse into the function body
-            t->code = concat(t->code, t->kids[2]->code); // splice it in
-    
-            // --- epilogue ---
-            t->code = concat(t->code,
-                gen(O_DEALLOC, NULL_ADDR,
-                    (struct addr){ .region = R_IMMED, .u.offset = frameSize },
-                    NULL_ADDR));
-            t->code = concat(t->code,
-                gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
-    
+        
+            // generate body code
+            generate_code(body);
+            t->code = concat(t->code, body->code);
+        
+            // guarded epilogue: only if body did not return
+            struct instr *last = body->code;
+            while (last && last->next) last = last->next;
+            if (!last || last->opcode != O_RET) {
+                t->code = concat(t->code,
+                                 gen(O_DEALLOC, NULL_ADDR,
+                                     (struct addr){ .region=R_IMMED, .u.offset=currentFunctionSymtab->nextOffset }, NULL_ADDR));
+                t->code = concat(t->code,
+                                 gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
+            }
+        
+            // restore outer symtab
+            currentFunctionSymtab = oldSymtab;
             return;
         }
+        
+        
+    
+        // ---------------------------------------------
+        // Unified returnStatement handler
+        // ---------------------------------------------
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
-            generate_code(t->kids[0]);  // The expression being returned
+            int frameSize = currentFunctionSymtab->nextOffset;
+            if (frameSize == 0) frameSize = 8;
+            // Generate the returned expression
+            generate_code(t->kids[0]);
             t->place = t->kids[0]->place;
+        
+            // Unwind frame and return value
             t->code = concat(t->kids[0]->code,
+                             gen(O_DEALLOC, NULL_ADDR,
+                                 (struct addr){ .region = R_IMMED, .u.offset = frameSize },
+                                 NULL_ADDR));
+            t->code = concat(t->code,
                              gen(O_RET, NULL_ADDR, t->kids[0]->place, NULL_ADDR));
             return;
         }
         
-        else if (strcmp(t->symbolname, "variableDeclaration")==0 && t->nkids>=3) {
-            struct tree *id = t->kids[0];
+        // 2) bare return (no expression)
+        else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 0) {
+            int frameSize = currentFunctionSymtab->nextOffset;
+            if (frameSize == 0) frameSize = 8;
+            // Unwind frame and return
+            t->code = gen(O_DEALLOC, NULL_ADDR,
+                          (struct addr){ .region = R_IMMED, .u.offset = frameSize },
+                          NULL_ADDR);
+            t->code = concat(t->code,
+                             gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
+            return;
+        }
+        
+        else if ((strcmp(t->symbolname, "variableDeclaration") == 0 ||
+                strcmp(t->symbolname, "constVariableDeclaration") == 0)
+                && t->nkids >= 3)
+        {
+            struct tree *id   = t->kids[0];
             struct tree *init = t->kids[2];
-            
-            // Force generate code for initializer
-            if (init) generate_code(init);
-            
-            // Debug output to see what's happening
-            debug_print("Variable declaration: %s, initializer place: %s:%d\n", 
-                        id->leaf->text, 
-                        init ? regionname(init->place.region) : "none",
-                        init ? init->place.u.offset : -1);
-            
-            // Look up variable in symbol table
+
+            // Lookup storage slot for the variable
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
             if (!entry) {
-                fprintf(stderr, "ERROR: Variable '%s' not in symbol table\n", id->leaf->text);
+                fprintf(stderr, "ERROR: Unknown variable '%s' in codegen\n", id->leaf->text);
                 return;
             }
-            
-            t->place = entry->location;
-            
-            // Generate assignment regardless of initializer (for debugging)
-            if (init) {
-                struct instr *assign = gen(O_ASN,
-                                          entry->location,
-                                          init->place,
-                                          NULL_ADDR);
-                debug_print("Generated variable assignment: %s:%d = %s:%d\n",
-                           regionname(entry->location.region), entry->location.u.offset,
-                           regionname(init->place.region), init->place.u.offset);
-                t->code = concat(init->code, assign);
-            } else {
-                // Even without initializer, create an empty assignment for debugging
-                struct addr zero = { .region = R_IMMED, .u.offset = 0 };
-                t->code = gen(O_ASN, entry->location, zero, NULL_ADDR);
-            }
+            id->place = entry->location;
+
+            // Generate code for the initializer
+            generate_code(init);
+            t->code = init->code;
+
+            // Store into the variable slot
+            t->code = concat(t->code,
+                            gen(O_ASN, id->place, init->place, NULL_ADDR));
+            t->place = id->place;
             return;
         }
 

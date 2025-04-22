@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "tac.h"
+#include "symtab.h"
 
 char *regionnames[] = {
     "global",  /* R_GLOBAL, 2001 */
@@ -37,16 +38,19 @@ char *pseudoname(int i) { return pseudonames[i-D_GLOB]; }
 
 int labelcounter;
 
-/* Changed signature to use (void) */
+// Draw temporaries from the end of the local‐variable frame
+extern SymbolTable currentFunctionSymtab;
 struct addr new_temp(void) {
-    static int temp_offset = 0;
     struct addr temp;
-    temp.region = R_LOCAL;  // Should be 2009
-    temp.u.offset = temp_offset;
-    temp_offset += 8;       // Each temporary uses 8 bytes
-
-    // Add a debug print:
-    fprintf(stderr, "DEBUG: new_temp() returning temp with region=%d, offset=%d\n", temp.region, temp.u.offset);
+    temp.region = R_LOCAL;  
+    // carve a word off the *current* frame size
+    temp.u.offset = currentFunctionSymtab->nextOffset;
+    // grow the frame to include this temp
+    currentFunctionSymtab->nextOffset += 8;
+    fprintf(stderr,
+        "DEBUG: new_temp() using local:%d  (nextOffset now %d)\n",
+        temp.u.offset,
+        currentFunctionSymtab->nextOffset);
     return temp;
 }
 

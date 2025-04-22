@@ -24,6 +24,7 @@ int alctoken(int category, char *text) {
     yylval.treeptr->symbolname = strdup(text);
     yylval.treeptr->nkids = 0;
     yylval.treeptr->leaf = malloc(sizeof(struct token));
+    yylval.treeptr->returned = 0;
 
     struct token *tok = yylval.treeptr->leaf;
     tok->category = category;

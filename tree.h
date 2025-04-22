@@ -39,6 +39,7 @@ struct tree {
     SymbolTable scope;
     struct addr place;
     struct instr *code;
+    int returned;
     struct addr first;     // Entry label for this node
     struct addr follow;    // Exit label for this node
     struct addr onTrue;    // Branch target when condition is true
