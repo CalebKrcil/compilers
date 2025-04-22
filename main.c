@@ -183,12 +183,10 @@ void assign_first(struct tree *t)
 {
     if (!t) return;
     
-    // Post-order traversal - process children first
     for(int i = 0; i < t->nkids; i++) {
         assign_first(t->kids[i]);
     }
     
-    // Check for node types that need first labels
     if (t->symbolname) {
         if (strcmp(t->symbolname, "while_statement") == 0 ||
             strcmp(t->symbolname, "if_statement") == 0 ||
@@ -198,7 +196,7 @@ void assign_first(struct tree *t)
             struct addr *label = genlabel();
             t->first = *label;
             t->first_used = 1;
-            free(label);  // Free the malloc'd label since we copied it
+            free(label); 
             
             printf("Assigned first label %d to %s node\n", 
                         t->first.u.offset, t->symbolname);
@@ -210,11 +208,9 @@ void assign_follow(struct tree *t)
 {
     if (!t) return;
     
-    // Check for node types that need to set follow labels for children
     if (t->symbolname) {
         if (strcmp(t->symbolname, "while_statement") == 0 && t->nkids >= 2) {
-            // For a while, the condition's follow is the statement's first
-            // and the statement's follow loops back to condition's first
+
             struct tree *cond = t->kids[0];
             struct tree *body = t->kids[1];
             
@@ -229,7 +225,6 @@ void assign_follow(struct tree *t)
                     free(loop_label);
                 }
                 
-                // While loop's own follow goes to the statement after it
                 if (t->follow_used) {
                     cond->follow = t->follow;
                     cond->follow_used = 1;
@@ -237,8 +232,7 @@ void assign_follow(struct tree *t)
             }
         }
         else if (strcmp(t->symbolname, "if_statement") == 0 && t->nkids >= 2) {
-            // For if, condition's follow is then-clause's first,
-            // and then-clause's follow is the if's follow
+
             struct tree *cond = t->kids[0];
             struct tree *then_clause = t->kids[1];
             struct tree *else_clause = t->nkids > 2 ? t->kids[2] : NULL;
@@ -259,7 +253,6 @@ void assign_follow(struct tree *t)
                     }
                 }
                 
-                // If there's an else clause, condition's onFalse should go there
                 if (else_clause && else_clause->first_used) {
                     cond->onFalse = else_clause->first;
                     cond->onFalse_used = 1;
@@ -270,7 +263,6 @@ void assign_follow(struct tree *t)
             }
         }
         else if (strcmp(t->symbolname, "statement_sequence") == 0 && t->nkids >= 2) {
-            // For statement sequences, each statement's follow is the next statement's first
             for (int i = 0; i < t->nkids - 1; i++) {
                 if (t->kids[i] && t->kids[i+1] && t->kids[i+1]->first_used) {
                     t->kids[i]->follow = t->kids[i+1]->first;
@@ -278,7 +270,6 @@ void assign_follow(struct tree *t)
                 }
             }
             
-            // Last statement's follow is the sequence's follow
             if (t->nkids > 0 && t->kids[t->nkids-1] && t->follow_used) {
                 t->kids[t->nkids-1]->follow = t->follow;
                 t->kids[t->nkids-1]->follow_used = 1;
@@ -286,7 +277,6 @@ void assign_follow(struct tree *t)
         }
     }
     
-    // Pre-order traversal - process children after parent
     for(int i = 0; i < t->nkids; i++) {
         assign_follow(t->kids[i]);
     }
@@ -296,13 +286,11 @@ void assign_conditional_labels(struct tree *t)
 {
     if (!t) return;
     
-    // Check for node types that need conditional branching
     if (t->symbolname) {
         if (strcmp(t->symbolname, "comparison") == 0 || 
             strcmp(t->symbolname, "logical_and") == 0 ||
             strcmp(t->symbolname, "logical_or") == 0) {
             
-            // If not already set by parent, generate new labels
             if (!t->onTrue_used) {
                 struct addr *true_label = genlabel();
                 t->onTrue = *true_label;
@@ -317,37 +305,30 @@ void assign_conditional_labels(struct tree *t)
                 free(false_label);
             }
             
-            // For logical operators, propagate to children as needed
             if (strcmp(t->symbolname, "logical_and") == 0 && t->nkids >= 2) {
-                // For AND, first operand's false label is the entire AND's false label
-                // Second operand gets the parent's labels
+
                 t->kids[0]->onFalse = t->onFalse;
                 t->kids[0]->onFalse_used = 1;
                 
-                // First operand's true goes to evaluate second operand
                 struct addr *second_label = genlabel();
                 t->kids[0]->onTrue = *second_label;
                 t->kids[0]->onTrue_used = 1;
                 free(second_label);
                 
-                // Second operand's labels are the same as the parent's
                 t->kids[1]->onTrue = t->onTrue;
                 t->kids[1]->onTrue_used = 1;
                 t->kids[1]->onFalse = t->onFalse;
                 t->kids[1]->onFalse_used = 1;
             }
             else if (strcmp(t->symbolname, "logical_or") == 0 && t->nkids >= 2) {
-                // For OR, first operand's true label is the entire OR's true label
                 t->kids[0]->onTrue = t->onTrue;
                 t->kids[0]->onTrue_used = 1;
                 
-                // First operand's false goes to evaluate second operand
                 struct addr *second_label = genlabel();
                 t->kids[0]->onFalse = *second_label;
                 t->kids[0]->onFalse_used = 1;
                 free(second_label);
                 
-                // Second operand's labels are the same as the parent's
                 t->kids[1]->onTrue = t->onTrue;
                 t->kids[1]->onTrue_used = 1;
                 t->kids[1]->onFalse = t->onFalse;
@@ -356,7 +337,6 @@ void assign_conditional_labels(struct tree *t)
         }
     }
     
-    // Pre-order traversal - then process children
     for(int i = 0; i < t->nkids; i++) {
         assign_conditional_labels(t->kids[i]);
     }
@@ -397,7 +377,7 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
         }
 
         if (error_count == 0) {
-            printf("No errors\n");
+            // printf("No errors\n");
 
             if (print_symtab) {
                 print_symbols(globalSymtab);
@@ -426,13 +406,10 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
         }
 
 
-        // First pass: assign first labels (bottom-up)
         assign_first(root);
         
-        // Second pass: assign follow labels (top-down)
         assign_follow(root);
         
-        // Third pass: assign conditional branch labels (top-down)
         assign_conditional_labels(root);
         generate_code(root);
         write_ic_file(current_filename, root->code);

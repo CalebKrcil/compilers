@@ -91,24 +91,23 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int i
 
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
     if (!st) return NULL;
-    fprintf(stderr,
-        "DEBUG[lookup_symbol] st=%p parent=%p nBuckets=%d tbl=%p looking for '%s'\n",
-        (void*)st,
-        (void*)(st ? st->parent : NULL),
-        st ? st->nBuckets : -1,
-        (void*)(st ? st->tbl : NULL),
-        s);
+    // fprintf(stderr,
+    //     "DEBUG[lookup_symbol] st=%p parent=%p nBuckets=%d tbl=%p looking for '%s'\n",
+    //     (void*)st,
+    //     (void*)(st ? st->parent : NULL),
+    //     st ? st->nBuckets : -1,
+    //     (void*)(st ? st->tbl : NULL),
+    //     s);
     
     int index = hash(st, s);
-    // DEBUG TRACE: show the hashed index
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
         if (strcmp(entry->s, s) == 0){
-            char *type_str = (entry->type ? typename(entry->type) : "(none)");
-            fprintf(stderr,
-                "DEBUG[lookup_symbol] hash index = %d type=%s\n",
-                index, 
-                type_str);
+            // char *type_str = (entry->type ? typename(entry->type) : "(none)");
+            // fprintf(stderr,
+            //     "DEBUG[lookup_symbol] hash index = %d type=%s\n",
+            //     index, 
+            //     type_str);
             return entry;
         }
         entry = entry->next;
@@ -338,20 +337,17 @@ void insert_method_symbol(SymbolTable st,
         snprintf(full_name, sizeof(full_name), "%s.%s", class_name, method_name);
     }
 
-    // 1) build the FuncType describing this method
     typeptr func_type = alctype(FUNC_TYPE);
     func_type->u.f.returntype = return_type;
     func_type->u.f.nparams     = param_count;
 
-    // 2) insert via insert_symbol so region/offset/mutable/nullable are set
     insert_symbol(st,
                 full_name,
-                METHOD,       // or FUNCTION depending on your enum
+                METHOD,       
                 func_type,
-                /*is_mutable=*/0,
-                /*is_nullable=*/0);
+                0,
+                0);
 
-    // 3) retrieve it and fill in the param_types array
     SymbolTableEntry e = lookup_symbol_current_scope(st, full_name);
     if (!e) {
         fprintf(stderr, "Internal error: builtin %s not found after insert\n",
@@ -363,7 +359,6 @@ void insert_method_symbol(SymbolTable st,
     if (param_count > 0) {
         e->param_types = malloc(param_count * sizeof(typeptr));
     for (int i = 0; i < param_count; i++) {
-        // your param_types[] are string names, so re‑resolve them:
         e->param_types[i] = typeptr_name(param_types[i]);
     }
     } else {

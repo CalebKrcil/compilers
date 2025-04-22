@@ -17,24 +17,22 @@ typedef struct tac_list {
     struct instr *tail;
 } tac_list;
 
-/* Regions: */
-/* Regions for 3-address code intermediate representation */
-#define R_GLOBAL 2001   /* For global variables and string constants */
-#define R_CLASS  2002   /* For class-related symbols (if needed) */
-#define R_LABEL  2003   /* For jump labels in the code region */
-#define R_CONST  2004   /* For global constants */
-#define R_NAME   2005   /* For symbolic names, if used */
-#define R_NONE   2006   /* Represents an invalid or unused region */
 
-/* New regions required for the assignment: */
-#define R_STRUCT 2007   /* For struct members */
-#define R_PARAM  2008   /* For function parameters */
-#define R_LOCAL  2009   /* For local variables and temporary values */
-#define R_IMMED  2010   /* For immediate values used directly in instructions */
-#define R_FP     2011   /* frame pointer */
-#define R_SP     2012   /* stack pointer */
-#define R_MEM    2013   /* indirect memory (for loads/stores) */
-#define R_RET    2014   /* return‐value register */
+#define R_GLOBAL 2001   
+#define R_CLASS  2002  
+#define R_LABEL  2003  
+#define R_CONST  2004   
+#define R_NAME   2005   
+#define R_NONE   2006   
+
+#define R_STRUCT 2007   
+#define R_PARAM  2008   
+#define R_LOCAL  2009   
+#define R_IMMED  2010   
+#define R_FP     2011   
+#define R_SP     2012   
+#define R_MEM    2013   
+#define R_RET    2014   
 
 
 struct instr {
@@ -42,7 +40,6 @@ struct instr {
    struct addr dest, src1, src2;
    struct instr *next;
 };
-/* Opcodes, per lecture notes */
 #define O_ADD   3001
 #define O_SUB   3002
 #define O_MUL   3003
@@ -64,16 +61,16 @@ struct instr {
 #define O_PARM  3019
 #define O_CALL  3020
 #define O_RET   3021
-#define O_IADD  3022   /* Integer addition */
-#define O_DADD  3023   /* Double (or floating-point) addition */
-#define O_ISUB  3024   /* Integer subtraction */
-#define O_DSUB  3025   /* Double subtraction */
+#define O_IADD  3022   
+#define O_DADD  3023   
+#define O_ISUB  3024   
+#define O_DSUB  3025   
 
-#define O_IMUL  3026   /* Integer multiplication */
-#define O_DMUL  3027   /* Double multiplication */
+#define O_IMUL  3026   
+#define O_DMUL  3027   
 
-#define O_IDIV  3028   /* Integer division */
-#define O_DDIV  3029   /* Double division */
+#define O_IDIV  3028   
+#define O_DDIV  3029   
 
 #define O_IEQ 3030
 #define O_ILT 3031
@@ -81,36 +78,33 @@ struct instr {
 #define O_IGT 3033
 #define O_IGE 3034
 #define O_INE 3035
-#define O_LBL     3036   /* label marker */
-#define O_BR      3037   /* unconditional branch */
-#define O_BZ      3038   /* branch if zero */
-#define O_BNZ     3039   /* branch if not zero */
-#define O_NOT     3040   /* logical NOT */
-#define O_PUSH    3041   /* push register onto stack */
-#define O_POP     3042   /* pop from stack into register */
-#define O_ALLOC   3043   /* allocate locals (stack frame) */
-#define O_DEALLOC 3044   /* deallocate locals */
+#define O_LBL     3036   
+#define O_BR      3037   
+#define O_BZ      3038   
+#define O_BNZ     3039   
+#define O_NOT     3040   
+#define O_PUSH    3041   
+#define O_POP     3042   
+#define O_ALLOC   3043   
+#define O_DEALLOC 3044   
 #define O_IMOD    3045
 #define O_DMOD    4046
-/* declarations/pseudo instructions */
 #define D_GLOB  3051
 #define D_PROC  3052
 #define D_LOCAL 3053
 #define D_LABEL 3054
 #define D_END   3055
-#define D_PROT  3056 /* prototype "declaration" */
+#define D_PROT  3056 
 
 struct instr *gen(int, struct addr, struct addr, struct addr);
 struct instr *concat(struct instr *, struct instr *);
-struct instr *append(struct instr *l1, struct instr *l2);  /* <-- Added prototype */
+struct instr *append(struct instr *l1, struct instr *l2);  
 char *regionname(int i);
 char *opcodename(int i);
 char *pseudoname(int i);
 struct addr *genlabel();
-// Create a new tac_list with a single instruction.
 tac_list *new_tac_list(struct instr *instr);
 
-// Concatenates two tac_lists, returning a new tac_list.
 tac_list *concat_tac_lists(tac_list *list1, tac_list *list2);
 void free_tac_list(tac_list *list);
 
