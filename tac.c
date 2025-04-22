@@ -38,14 +38,11 @@ char *pseudoname(int i) { return pseudonames[i-D_GLOB]; }
 
 int labelcounter;
 
-// Draw temporaries from the end of the local‐variable frame
 extern SymbolTable currentFunctionSymtab;
 struct addr new_temp(void) {
     struct addr temp;
     temp.region = R_LOCAL;  
-    // carve a word off the *current* frame size
     temp.u.offset = currentFunctionSymtab->nextOffset;
-    // grow the frame to include this temp
     currentFunctionSymtab->nextOffset += 8;
     // fprintf(stderr,
     //     "DEBUG: new_temp() using local:%d  (nextOffset now %d)\n",
@@ -54,7 +51,6 @@ struct addr new_temp(void) {
     return temp;
 }
 
-/* Changed signature to use (void) */
 struct addr *genlabel(void)
 {
    struct addr *a = malloc(sizeof(struct addr));
@@ -111,10 +107,7 @@ struct instr *concat(struct instr *l1, struct instr *l2)
    return append(copylist(l1), l2);
 }
 
-/* 
- * Create a new TAC list that contains a single instruction.
- * The instruction's next pointer is set to NULL.
- */
+
 tac_list *new_tac_list(struct instr *instr) {
     tac_list *list = malloc(sizeof(tac_list));
     if (!list) {
@@ -129,33 +122,21 @@ tac_list *new_tac_list(struct instr *instr) {
     return list;
 }
 
-/*
- * Concatenates two TAC lists.
- * If one of the lists is NULL, the function returns the other.
- * Otherwise, it appends the second list to the end of the first list,
- * updates the tail pointer of the first list, frees the container for
- * the second list (but not the instructions), and returns the merged list.
- */
+
 tac_list *concat_tac_lists(tac_list *list1, tac_list *list2) {
     if (list1 == NULL)
         return list2;
     if (list2 == NULL)
         return list1;
     
-    /* Append list2 at the tail of list1 */
     list1->tail->next = list2->head;
     list1->tail = list2->tail;
     
-    /* Free the container for list2, instructions remain part of list1 */
     free(list2);
     return list1;
 }
 
-/*
- * Free a TAC list.
- * This function walks through the linked list of instructions, frees each instruction,
- * and finally frees the tac_list container itself.
- */
+
 void free_tac_list(tac_list *list) {
     if (list == NULL)
         return;

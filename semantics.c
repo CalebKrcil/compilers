@@ -17,19 +17,15 @@ void report_semantic_error(const char *msg, int lineno) {
 int check_type_compatibility(typeptr expected, typeptr actual) {
     if (!expected || !actual)
         return 0;
-    // If either type is "any", they are automatically compatible.
     if (expected->basetype == ANY_TYPE || actual->basetype == ANY_TYPE)
         return 1;
     
-    // Allow implicit conversion: if a double is expected, accept an int.
     if (expected->basetype == DOUBLE_TYPE && actual->basetype == INT_TYPE)
         return 1;
     
-    // Check for pointer equality or identical types.
     if (expected == actual)
         return 1;
     
-    // Check for same basetype.
     if (expected->basetype == actual->basetype)
         return 1;
     
@@ -52,13 +48,11 @@ int is_operator(int prodrule) {
 
 void flattenExpressionList(struct tree *exprList, struct tree ***args, int *count) {
     if (!exprList) return;
-    // If the node is an expression list, then it might be a nested structure.
     if (exprList->symbolname && strcmp(exprList->symbolname, "expressionList") == 0) {
         for (int i = 0; i < exprList->nkids; i++) {
             flattenExpressionList(exprList->kids[i], args, count);
         }
     } else {
-        // Otherwise, this node represents a single argument.
         *args = realloc(*args, ((*count) + 1) * sizeof(struct tree *));
         if (!(*args)) {
             fprintf(stderr, "Memory allocation failed in flattenExpressionList\n");
@@ -78,7 +72,6 @@ char *resolve_qualified_name(struct tree *t) {
         // fprintf(stderr, "DEBUG: Resolving node with symbolname: %s\n", t->symbolname);
     }
 
-    // If the node is a functionCall, use its first child.
     if (t->symbolname && strcmp(t->symbolname, "functionCall") == 0) {
         if (t->nkids > 0) {
             result = resolve_qualified_name(t->kids[0]);
@@ -87,14 +80,12 @@ char *resolve_qualified_name(struct tree *t) {
         }
     }
 
-    // If the node is a leaf, return its text.
     if (t->leaf) {
         result = strdup(t->leaf->text);
         // fprintf(stderr, "DEBUG: Leaf node resolved to: %s\n", result);
         return result;
     }
 
-    // If this is a qualifiedName node, iterate over all children.
     if (t->symbolname && strcmp(t->symbolname, "qualifiedName") == 0) {
         int first = 1;
         for (int i = 0; i < t->nkids; i++) {
@@ -122,7 +113,6 @@ char *resolve_qualified_name(struct tree *t) {
         return result;
     }
     
-    // Fallback: if none of the above, return a copy of symbolname.
     if (t->symbolname) {
         result = strdup(t->symbolname);
         // fprintf(stderr, "DEBUG: Fallback node resolved to: %s\n", result);
@@ -188,22 +178,17 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     
         // printf("DEBUG: For loop encountered at line %d. Creating new scope for loop variable.\n", t->lineno);
         
-        // Create a new scope for the loop body.
         SymbolTable loop_scope = create_function_scope(current_scope, "forLoop");
         t->scope = loop_scope;
         
-        // Assume that the loop variable is the first child (t->kids[0]).
         if (t->kids[0] && t->kids[0]->leaf) {
             char *loopVarName = t->kids[0]->leaf->text;
-            // Insert the loop variable into the new loop scope with type int.
             insert_symbol(loop_scope, loopVarName, VARIABLE, integer_typeptr, 0, 0);
-            // Also update the AST node for the loop variable.
             t->kids[0]->type = integer_typeptr;
             t->kids[0]->is_mutable = 0; // You can mark it immutable if desired.
             // printf("DEBUG: Loop variable '%s' inserted with type int in new scope %p.\n", loopVarName, loop_scope);
         }
         
-        // Update the current scope for recursing into the loop body.
         current_scope = loop_scope;
     }
 
