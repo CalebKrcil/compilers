@@ -749,9 +749,21 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         else if (strcmp(t->symbolname, "functionCall")==0) {
             // 0) find the function’s address
             struct tree *fnNode = t->kids[0];
-            SymbolTableEntry fe = lookup_symbol(globalSymtab, fnNode->leaf->text);
-            if (!fe) fe = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
-            struct addr func_addr = fe->location;
+            SymbolTableEntry fentry = lookup_symbol(globalSymtab, fnNode->leaf->text);
+            if (!fentry)
+                fentry = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
+            if (!fentry) {
+                fprintf(stderr, "DEBUG: lookup_symbol failed for function '%s'\n", fnNode->leaf->text);
+            } else {
+                fprintf(stderr,
+                    "DEBUG: functionCall '%s' → fentry=%p addr=%s:%d\n",
+                    fnNode->leaf->text,
+                    (void*)fentry,
+                    regionname(fentry->location.region),
+                    fentry->location.u.offset
+                );
+            }
+            struct addr func_addr = fentry->location;
         
             // 1) flatten *all* argument subtrees
             struct instr *code = NULL;
@@ -780,53 +792,49 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
 
         /* -- functionDeclaration (prologue/body/epilogue) -- */
-        else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
-            if (t->nkids < 3 || t->kids[2] == NULL) {
-                fprintf(stderr, "ERROR: functionDeclaration node has only %d kids; expected 3\n",
-                        t->nkids);
+        else if (strcmp(t->symbolname, "functionDeclaration")==0) {
+            if (t->nkids < 3 || !t->kids[2]) {
+                fprintf(stderr, "ERROR: functionDeclaration has %d kids\n", t->nkids);
                 return;
             }
-        
-            /* 1) Generate a label for the function entry */
+    
+            // create a unique entry label
             struct addr label_addr = *genlabel();
-            t->code = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
-        
-            /* 2) Generate the function body code */
-            struct tree *bodyNode = t->kids[2];
-            generate_code(bodyNode);
-            struct instr *bodyCode = bodyNode->code;
-        
-            /* 3) Compute the stack frame size (at least 8 bytes) */
+    
+            // compute frame size
             int frameSize = currentFunctionSymtab->nextOffset;
             if (frameSize == 0) frameSize = 8;
-        
-            /* 4) Prologue */
+    
+            // --- prologue ---
+            t->code = NULL;
             t->code = concat(t->code,
-                gen(O_PUSH, NULL_ADDR,
+                gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR));
+            t->code = concat(t->code,
+                gen(O_PUSH,  NULL_ADDR,
                     (struct addr){ .region = R_FP,    .u.offset = 0 },
                     NULL_ADDR));
             t->code = concat(t->code,
                 gen(O_ASN,
-                    (struct addr){ .region = R_FP,    .u.offset = 0 },
-                    (struct addr){ .region = R_SP,    .u.offset = 0 },
+                    (struct addr){ .region = R_FP, .u.offset = 0 },
+                    (struct addr){ .region = R_SP, .u.offset = 0 },
                     NULL_ADDR));
             t->code = concat(t->code,
                 gen(O_ALLOC, NULL_ADDR,
                     (struct addr){ .region = R_IMMED, .u.offset = frameSize },
                     NULL_ADDR));
-        
-            /* 5) User’s function body */
-            t->code = concat(t->code, bodyCode);
-        
-            /* 6) Epilogue */
+    
+            // --- body ---
+            generate_code(t->kids[2]);                  // recurse into the function body
+            t->code = concat(t->code, t->kids[2]->code); // splice it in
+    
+            // --- epilogue ---
             t->code = concat(t->code,
                 gen(O_DEALLOC, NULL_ADDR,
                     (struct addr){ .region = R_IMMED, .u.offset = frameSize },
                     NULL_ADDR));
-            
             t->code = concat(t->code,
                 gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
-        
+    
             return;
         }
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
