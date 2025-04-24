@@ -496,11 +496,6 @@ multiplicative_expression:
         $$ = alctree(118, "multiplicative_expression", 2, $1, $3);
         $$->prodrule = MULT;
 
-        // 🪵 Debug print types
-        fprintf(stderr, "DEBUG: MULT types => left: %s, right: %s\n",
-                $1->type ? typename($1->type) : "(NULL)",
-                $3->type ? typename($3->type) : "(NULL)");
-
         if (check_type_compatibility($1->type, $3->type))
             $$->type = $1->type;
         else

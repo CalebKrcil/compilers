@@ -47,10 +47,10 @@ struct addr new_temp(void) {
     temp.u.offset = currentFunctionSymtab->nextOffset;
     // grow the frame to include this temp
     currentFunctionSymtab->nextOffset += 8;
-    fprintf(stderr,
-        "DEBUG: new_temp() using local:%d  (nextOffset now %d)\n",
-        temp.u.offset,
-        currentFunctionSymtab->nextOffset);
+    // fprintf(stderr,
+    //     "DEBUG: new_temp() using local:%d  (nextOffset now %d)\n",
+    //     temp.u.offset,
+    //     currentFunctionSymtab->nextOffset);
     return temp;
 }
 
@@ -64,7 +64,7 @@ struct addr *genlabel(void)
    }
    a->region = R_LABEL;
    a->u.offset = labelcounter++;
-   printf("generated a label %d\n", a->u.offset);
+//    printf("generated a label %d\n", a->u.offset);
    return a;
 }
 
@@ -80,11 +80,11 @@ struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3)
   rv->src1 = a2;
   rv->src2 = a3;
   rv->next = NULL;
-  fprintf(stderr, "DEBUG: gen -> %s %s:%d, %s:%d, %s:%d\n",
-    opcodename(op),
-    regionname(a1.region), a1.u.offset,
-    regionname(a2.region), a2.u.offset,
-    regionname(a3.region), a3.u.offset);
+//   fprintf(stderr, "DEBUG: gen -> %s %s:%d, %s:%d, %s:%d\n",
+//     opcodename(op),
+//     regionname(a1.region), a1.u.offset,
+//     regionname(a2.region), a2.u.offset,
+//     regionname(a3.region), a3.u.offset);
   return rv;
 }
 
@@ -107,7 +107,7 @@ struct instr *append(struct instr *l1, struct instr *l2)
 
 struct instr *concat(struct instr *l1, struct instr *l2)
 {
-    fprintf(stderr, "DEBUG: concat lists %p and %p\n", l1, l2);
+    // fprintf(stderr, "DEBUG: concat lists %p and %p\n", l1, l2);
    return append(copylist(l1), l2);
 }
 

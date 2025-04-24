@@ -1,15 +1,3 @@
-/*
- * codegen.c - Code Generation Module for k0 Intermediate Code
- *
- * This module traverses the AST (from tree.h) and synthesizes three-address
- * code (TAC) for the subset of Kotlin supported by k0.
- *
- * It provides functionality such as generating the intermediate code file,
- * printing operands/instructions, and traversing the AST for code generation.
- * The generate_code() function below performs a complete postorder traversal
- * so that every node in the AST is visited and all instructions are generated.
- */
-
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
@@ -17,7 +5,6 @@
  
  #include "tree.h"
  #include "tac.h"
- // #include "ytab.h"   // For token categories
  #include "k0gram.tab.h"
  #include "type.h"
  #include "codegen.h"
@@ -29,14 +16,12 @@
  extern SymbolTable currentFunctionSymtab;
  extern SymbolTable globalSymtab;
 
- /* External function prototypes from tac.c */
  extern struct addr new_temp(void);
  extern struct addr *genlabel(void);
  extern struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3);
  extern struct instr *concat(struct instr *l1, struct instr *l2);
 static struct addr *current_break_label = NULL;
 
- /* External functions from tac.c */
  extern char *regionname(int i);
  extern char *opcodename(int i);
  extern char *pseudoname(int i);
@@ -54,7 +39,6 @@ static struct addr *current_break_label = NULL;
  static void flattenExprList(struct tree *elist, struct tree ***outArgs, int *outCount) {
     if (!elist) return;
     if (elist->symbolname && strcmp(elist->symbolname, "expressionList") == 0) {
-        // two‐child node: (expressionList COMMA expression) or single child
         if (elist->nkids == 1) {
             flattenExprList(elist->kids[0], outArgs, outCount);
         } else {
@@ -68,7 +52,6 @@ static struct addr *current_break_label = NULL;
     }
 }
  
- /* Debug print function */
  static void debug_print(const char *format, ...) {
      if (DEBUG_OUTPUT) {
          va_list args;
@@ -78,11 +61,7 @@ static struct addr *current_break_label = NULL;
      }
  }
  
- /*
-  * generate_output_filename
-  *   Given an input filename (e.g. "foo.kt"), produce an output filename
-  *   (e.g. "foo.ic") by replacing its extension with ".ic".
-  */
+
  static void generate_output_filename(const char *input_filename, char *output_filename, size_t size) {
      if (!input_filename || !output_filename || size == 0) {
          fprintf(stderr, "ERROR: Invalid parameters to generate_output_filename\n");
@@ -99,13 +78,9 @@ static struct addr *current_break_label = NULL;
      }
  }
  
- /*
-  * output_operand
-  *   Writes a single operand to the file in the format: region:offset.
-  */
+
 static void format_operand(struct addr a, char *buf, size_t sz) {
     if (a.region == R_NAME && a.u.name) {
-        // print the function name (or any name region)
         snprintf(buf, sz, "%s", a.u.name);
     }
     else if (a.region == R_NONE) {
@@ -121,22 +96,16 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     }
 }
 
- /*
-  * output_instruction
-  *   Writes a single TAC instruction to the file.
-  *   The format is: <opcode> <dest>, <src1>, <src2>
-  */
+
  static void output_instruction(FILE *f, struct instr *instr) {
     if (!f || !instr) return;
 
     char destbuf[32], src1buf[32], src2buf[32];
 
-    // render each operand into a string
     format_operand(instr->dest,  destbuf, sizeof destbuf);
     format_operand(instr->src1, src1buf, sizeof src1buf);
     format_operand(instr->src2, src2buf, sizeof src2buf);
 
-    // fixed‑width columns: opcode (8 cols), then each operand (16 cols)
     fprintf(f, "%-8s  %-16s  %-16s  %-16s\n",
             opcodename(instr->opcode),
             destbuf,
@@ -144,11 +113,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             src2buf);
 }
  
- /*
-  * write_ic_file
-  *   Writes out the intermediate code file (.ic) for the program.
-  *   The file is partitioned into three sections: .string, .data, and .code.
-  */
+
  void write_ic_file(const char *input_filename, struct instr *code) {
      if (!input_filename) {
          fprintf(stderr, "ERROR: NULL input filename provided to write_ic_file\n");
@@ -169,7 +134,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
      
      fprintf(f, ".string\n");
     for (int i = 0; i < strcount; i++) {
-        // print each literal label and its text
         fprintf(f, "%s\t\"%s\"\n", strtab[i].label, strtab[i].text);
     }
      
@@ -199,30 +163,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
      fclose(f);
  }
  
- /*
-  * generate_code
-  *
-  * This enhanced implementation traverses the AST in postorder and handles a comprehensive
-  * set of language constructs:
-  * 
-  * Expressions:
-  *   • Literals (IntegerLiteral, RealLiteral, StringLiteral)
-  *   • Identifiers
-  *   • Binary arithmetic operators (additive, subtractive, multiplicative, division)
-  *   • Comparison operators
-  *   • Logical operators (AND, OR)
-  *   • Unary operations (negation, NOT)
-  *
-  * Statements:
-  *   • Variable declarations and assignments
-  *   • Function calls and declarations
-  *   • Control flow statements (if-else, while loops, for loops)
-  *   • Return statements
-  *
-  * Array operations:
-  *   • Array access
-  *   • Array creation
-  */
+
  void generate_code(struct tree *t) {
     if (!t) return;
 
@@ -232,7 +173,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     t->code  = NULL;
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
 
-    /* --- unwrap any single‐child literal wrapper nodes so leaf‐case fires --- */
     if (!t->leaf && t->nkids == 1 && t->kids[0] && t->kids[0]->leaf) {
         generate_code(t->kids[0]);
         t->place = t->kids[0]->place;
@@ -240,7 +180,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         return;
     }
 
-    /* Print detailed node info for debugging */
     if (t->leaf) {
         debug_print("Leaf node: category=%d, text=%s\n", 
                    t->leaf->category,
@@ -248,12 +187,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     } else {
         debug_print("Interior node with %d kids\n", t->nkids);
     }
-    /* 1) Leaf nodes (literals & identifiers) */
+    /*literals & identifiers*/
     if (t->leaf) {
-        printf("Category: %d\n", t->leaf->category);
+        // printf("Category: %d\n", t->leaf->category);
         switch (t->leaf->category) {
             case IntegerLiteral: {
-                printf("int literal\n");
+                // printf("int literal\n");
                 t->place = new_temp();
                 struct addr imm = { .region = R_IMMED,
                                     .u.offset = t->leaf->value.ival };
@@ -265,7 +204,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case RealLiteral: {
-                printf("real literal\n");
+                // printf("real literal\n");
                 t->place = new_temp();
                 struct addr imm = { .region = R_IMMED,
                                     .u.offset = (int)t->leaf->value.dval };
@@ -279,7 +218,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             case StringLiteral: {
                 static int stringLabelCounter = 0;
             
-                // Deduplicate string literals
                 for (int i = 0; i < strcount; i++) {
                     if (strcmp(strtab[i].text, t->leaf->text) == 0) {
                         t->place.region = R_GLOBAL;
@@ -288,7 +226,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                     }
                 }
             
-                // New string literal
                 char label[32];
                 snprintf(label, sizeof(label), "S%d", stringLabelCounter);
                 t->place.region = R_GLOBAL;
@@ -299,7 +236,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             
             case BooleanLiteral: {
-                printf("boolean literal\n");
+                // printf("boolean literal\n");
                 t->place = new_temp();
                 int val = strcmp(t->leaf->text,"true")==0 ? 1 : 0;
                 struct addr imm = { .region = R_IMMED, .u.offset = val };
@@ -311,9 +248,9 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case Identifier: {
-                fprintf(stderr,
-                    "DEBUG: Identifier node: text=\"%s\"\n",
-                    t->leaf->text);
+                // fprintf(stderr,
+                //     "DEBUG: Identifier node: text=\"%s\"\n",
+                //     t->leaf->text);
                 SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
                 if (e) {
                     t->place = e->location;
@@ -335,41 +272,37 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
     }
 
-    /* 2) Special‑cases (in order) */
+    /*Special‑cases*/
     if (t->symbolname) {
-        /* -- variableDeclaration -- */
-        fprintf(stderr,"NODE: symbolname=%s, prodrule=%d\n",
-            t->symbolname? t->symbolname:"(null)",
-            t->prodrule);
+        /*variableDeclaration */
+        // fprintf(stderr,"NODE: symbolname=%s, prodrule=%d\n",
+        //     t->symbolname? t->symbolname:"(null)",
+        //     t->prodrule);
 
-        /* -- assignment -- */
+        /*assignment*/
         if (strcmp(t->symbolname, "assignment")==0 && t->nkids == 2) {
             struct tree *lhs = t->kids[0]; 
             struct tree *rhs = t->kids[1];
             
-            // Handle direct identifier on left side
             if (lhs->leaf && lhs->leaf->category == Identifier) {
                 SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, lhs->leaf->text);
                 
                 if (!entry) {
                     fprintf(stderr, "ERROR: Variable '%s' not found in symbol table\n", 
                             lhs->leaf->text);
-                    t->place = new_temp(); // Assign place to avoid cascading errors
+                    t->place = new_temp(); 
                     return;
                 }
                 lhs->place = entry->location;
             } else {
-                // For more complex LHS expressions
                 if (lhs) generate_code(lhs);
             }
             
-            // Generate code for the right side
             if (rhs) generate_code(rhs);
             
-            // Ensure both sides have valid places
             if (lhs->place.region == R_NONE || rhs->place.region == R_NONE) {
                 fprintf(stderr, "ERROR: Invalid places in assignment\n");
-                t->place = lhs->place; // Still use LHS as result 
+                t->place = lhs->place; 
                 return;
             }
             
@@ -393,7 +326,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             int opcode;
             if      (t->prodrule == ADD) opcode = O_IADD;
             else if (t->prodrule == SUB) opcode = O_ISUB;
-            else                         opcode = O_IADD;  // fallback
+            else                         opcode = O_IADD;  
 
             t->place = new_temp();
             t->code  = concat(
@@ -408,7 +341,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
         
 
-        /* -- multiplicative_expression -- */
+        /*multiplicative_expression*/
         else if (strcmp(t->symbolname, "multiplicative_expression") == 0 && t->nkids == 2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
@@ -434,24 +367,20 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
 
 
-        /* -- comparison (<,>,<=,>=,==,!=) -- */
+        /*comparison*/
         else if (strcmp(t->symbolname, "comparison")==0 && t->nkids==2) {
-            // generate code for both operands
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
         
-            // pick the right opcode based on the production (or symbolname/prodrule)
             int opcode;
-            // if you have access to t->prodrule constants for '>' and '<':
             if      (t->prodrule == RANGLE) opcode = O_IGT;
             else if (t->prodrule == LANGLE) opcode = O_ILT;
             else if (t->prodrule == GE) opcode = O_IGE;
             else if (t->prodrule == LE) opcode = O_ILE;
             else if (t->prodrule == EQEQ) opcode = O_IEQ;
             else if (t->prodrule == EXCL_EQ) opcode = O_INE;
-            else                                    opcode = O_IGT;  // fallback
+            else                                    opcode = O_IGT; 
         
-            // stitch their code together, emit the compare, and return
             t->place = new_temp();
             t->code  = concat(
                           concat(t->kids[0]->code, t->kids[1]->code),
@@ -463,7 +392,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /* -- unary negation -- */
+        /*unary negation*/
         else if (strcmp(t->symbolname, "negation")==0 && t->nkids>=1) {
             generate_code(t->kids[0]);
             t->place = new_temp();
@@ -474,7 +403,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /* -- logical_not -- */
+        /*logical_not*/
         else if (strcmp(t->symbolname, "logical_not")==0 && t->nkids>=1) {
             generate_code(t->kids[0]);
             t->place = new_temp();
@@ -489,7 +418,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct tree *condition = t->kids[0];
             struct tree *body = t->kids[1];
             
-            // Generate labels if not already assigned
             if (!t->first_used) {
                 struct addr *start_label = genlabel();
                 t->first = *start_label;
@@ -504,28 +432,21 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 free(cond_false_label);
             }
             
-            // Generate code for condition with branching
             generate_code(condition);
             
-            // Start with the loop label
             struct instr *loop_code = gen(D_LABEL, t->first, NULL_ADDR, NULL_ADDR);
             
-            // Add the condition code
             loop_code = concat(loop_code, condition->code);
             
-            // Branch if condition is false (exit loop)
             struct instr *branch_exit = gen(O_BZ, condition->follow, condition->place, NULL_ADDR);
             loop_code = concat(loop_code, branch_exit);
             
-            // Generate and add the loop body code
             generate_code(body);
             loop_code = concat(loop_code, body->code);
             
-            // Add jump back to beginning of loop
             struct instr *jump_back = gen(O_BR, t->first, NULL_ADDR, NULL_ADDR);
             loop_code = concat(loop_code, jump_back);
             
-            // Add the exit label
             struct instr *exit_label = gen(D_LABEL, condition->follow, NULL_ADDR, NULL_ADDR);
             loop_code = concat(loop_code, exit_label);
             
@@ -533,7 +454,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /* -- if statement -- */
+        /*if statement*/
         else if (strcmp(t->symbolname, "ifStatement") == 0 && t->nkids == 2) {
             struct tree *cond = t->kids[0];
             struct tree *then_stmt = t->kids[1];
@@ -544,7 +465,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             generate_code(cond);
             code = concat(code, cond->code);
         
-            // cond->place must hold the boolean result
             code = concat(code, gen(O_BZ, *end_label, cond->place, NULL_ADDR));
         
             generate_code(then_stmt);
@@ -556,7 +476,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         else if (strcmp(t->symbolname, "ifElseStatement") == 0 && t->nkids == 3) {
-            printf("DEBUG: Entering ifElseStatement\n");
+            // printf("DEBUG: Entering ifElseStatement\n");
 
             struct tree *cond = t->kids[0];
             struct tree *then_branch = t->kids[1];
@@ -585,38 +505,29 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /* -- logical_and expression -- */
+        /*logical_and expression*/
         else if (strcmp(t->symbolname, "logical_and") == 0 && t->nkids == 2) {
-            // Generate temporary for result
             t->place = new_temp();
             
-            // Generate labels
             struct addr *false_label = genlabel();
             struct addr *end_label = genlabel();
             
-            // Generate code for left operand
             generate_code(t->kids[0]);
             
-            // Start building code
             struct instr *and_code = t->kids[0]->code;
             
-            // If left operand is false, short-circuit
             struct instr *branch_false = gen(O_BZ, *false_label, t->kids[0]->place, NULL_ADDR);
             and_code = concat(and_code, branch_false);
             
-            // Generate code for right operand
             generate_code(t->kids[1]);
             and_code = concat(and_code, t->kids[1]->code);
             
-            // Copy right result to output
             struct instr *copy_result = gen(O_ASN, t->place, t->kids[1]->place, NULL_ADDR);
             and_code = concat(and_code, copy_result);
             
-            // Jump to end
             struct instr *jump_end = gen(O_BR, *end_label, NULL_ADDR, NULL_ADDR);
             and_code = concat(and_code, jump_end);
             
-            // False label - set result to 0
             struct instr *false_instr = gen(D_LABEL, *false_label, NULL_ADDR, NULL_ADDR);
             and_code = concat(and_code, false_instr);
             
@@ -624,7 +535,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct instr *set_false = gen(O_ASN, t->place, zero, NULL_ADDR);
             and_code = concat(and_code, set_false);
             
-            // End label
             struct instr *end_instr = gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR);
             and_code = concat(and_code, end_instr);
             
@@ -634,22 +544,17 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /* -- logical_or expression -- */
+        /*logical_or expression*/
         else if (strcmp(t->symbolname, "logical_or") == 0 && t->nkids == 2) {
-            // Generate temporary for result
             t->place = new_temp();
             
-            // Generate labels
             struct addr *true_label = genlabel();
             struct addr *end_label = genlabel();
             
-            // Generate code for left operand
             generate_code(t->kids[0]);
             
-            // Start building code
             struct instr *or_code = t->kids[0]->code;
             
-            // If left operand is true, short-circuit
             struct addr one = { .region = R_IMMED, .u.offset = 1 };
             struct instr *comp_true = gen(O_INE, t->place, t->kids[0]->place, one);
             or_code = concat(or_code, comp_true);
@@ -657,26 +562,21 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct instr *branch_true = gen(O_BNZ, *true_label, t->place, NULL_ADDR);
             or_code = concat(or_code, branch_true);
             
-            // Generate code for right operand
             generate_code(t->kids[1]);
             or_code = concat(or_code, t->kids[1]->code);
             
-            // Copy right result to output
             struct instr *copy_result = gen(O_ASN, t->place, t->kids[1]->place, NULL_ADDR);
             or_code = concat(or_code, copy_result);
             
-            // Jump to end
             struct instr *jump_end = gen(O_BR, *end_label, NULL_ADDR, NULL_ADDR);
             or_code = concat(or_code, jump_end);
             
-            // True label - set result to 1
             struct instr *true_instr = gen(D_LABEL, *true_label, NULL_ADDR, NULL_ADDR);
             or_code = concat(or_code, true_instr);
             
             struct instr *set_true = gen(O_ASN, t->place, one, NULL_ADDR);
             or_code = concat(or_code, set_true);
             
-            // End label
             struct instr *end_instr = gen(D_LABEL, *end_label, NULL_ADDR, NULL_ADDR);
             or_code = concat(or_code, end_instr);
             
@@ -731,7 +631,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct addr tmp = new_temp();
         
             const char *op = t->leaf ? t->leaf->text : NULL;
-            printf("Equality operator: [%s]\n", op ? op : "NULL");
+            // printf("Equality operator: [%s]\n", op ? op : "NULL");
                     
             if (op) {
                 if (strcmp(op, "==") == 0 || strcmp(op, "===") == 0)
@@ -748,26 +648,25 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->place = tmp;
             return;
         }       
+        /*function Calls*/
         else if (strcmp(t->symbolname, "functionCall")==0) {
-            // 0) find the function’s address
             struct tree *fnNode = t->kids[0];
             SymbolTableEntry fentry = lookup_symbol(globalSymtab, fnNode->leaf->text);
             if (!fentry)
                 fentry = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
             if (!fentry) {
-                fprintf(stderr, "DEBUG: lookup_symbol failed for function '%s'\n", fnNode->leaf->text);
+                // fprintf(stderr, "DEBUG: lookup_symbol failed for function '%s'\n", fnNode->leaf->text);
             } else {
-                fprintf(stderr,
-                    "DEBUG: functionCall '%s' → fentry=%p addr=%s:%d\n",
-                    fnNode->leaf->text,
-                    (void*)fentry,
-                    regionname(fentry->location.region),
-                    fentry->location.u.offset
-                );
+                // fprintf(stderr,
+                //     "DEBUG: functionCall '%s' → fentry=%p addr=%s:%d\n",
+                //     fnNode->leaf->text,
+                //     (void*)fentry,
+                //     regionname(fentry->location.region),
+                //     fentry->location.u.offset
+                // );
             }
             struct addr func_addr = fentry->location;
         
-            // 1) flatten *all* argument subtrees
             struct instr *code = NULL;
             struct tree **args = NULL;
             int argc = 0;
@@ -775,7 +674,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 flattenExprList(t->kids[i], &args, &argc);
             }
         
-            // 2) for each real argument: generate it, then emit one PARM
             for (int i = 0; i < argc; i++) {
                 generate_code(args[i]);
                 code = concat(code, args[i]->code);
@@ -783,28 +681,23 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             free(args);
         
-            // 3) fresh temp for return
             t->place = new_temp();
         
-            // 4) emit the CALL
             code = concat(code, gen(O_CALL, t->place, func_addr, NULL_ADDR));
             t->code = code;
             return;
         }
         
 
-        /* -- functionDeclaration (prologue/body/epilogue) -- */
+        /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
-            // push the old function symtab and switch into this one
             SymbolTable oldSymtab = currentFunctionSymtab;
             currentFunctionSymtab = t->scope;
         
-            // generate and register the code label
             struct addr label_addr = *genlabel();
             SymbolTableEntry fentry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
             if (fentry) fentry->location = label_addr;
         
-            // prologue: label, push FP, set FP=SP, alloc frame
             t->code = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
             t->code = concat(t->code,
                              gen(O_PUSH, NULL_ADDR,
@@ -816,7 +709,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                              gen(O_ALLOC, NULL_ADDR,
                                  (struct addr){ .region=R_IMMED, .u.offset=currentFunctionSymtab->nextOffset }, NULL_ADDR));
         
-            // find the block child (function body)
             struct tree *body = NULL;
             for (int i = 0; i < t->nkids; i++) {
                 if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block") == 0) {
@@ -829,11 +721,9 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
         
-            // generate body code
             generate_code(body);
             t->code = concat(t->code, body->code);
         
-            // guarded epilogue: only if body did not return
             struct instr *last = body->code;
             while (last && last->next) last = last->next;
             if (!last || last->opcode != O_RET) {
@@ -844,24 +734,19 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                                  gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
             }
         
-            // restore outer symtab
             currentFunctionSymtab = oldSymtab;
             return;
         }
         
         
     
-        // ---------------------------------------------
-        // Unified returnStatement handler
-        // ---------------------------------------------
+       /*return Statement*/
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
             int frameSize = currentFunctionSymtab->nextOffset;
             if (frameSize == 0) frameSize = 8;
-            // Generate the returned expression
             generate_code(t->kids[0]);
             t->place = t->kids[0]->place;
         
-            // Unwind frame and return value
             t->code = concat(t->kids[0]->code,
                              gen(O_DEALLOC, NULL_ADDR,
                                  (struct addr){ .region = R_IMMED, .u.offset = frameSize },
@@ -871,11 +756,9 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        // 2) bare return (no expression)
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 0) {
             int frameSize = currentFunctionSymtab->nextOffset;
             if (frameSize == 0) frameSize = 8;
-            // Unwind frame and return
             t->code = gen(O_DEALLOC, NULL_ADDR,
                           (struct addr){ .region = R_IMMED, .u.offset = frameSize },
                           NULL_ADDR);
@@ -891,7 +774,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct tree *id   = t->kids[0];
             struct tree *init = t->kids[2];
 
-            // Lookup storage slot for the variable
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
             if (!entry) {
                 fprintf(stderr, "ERROR: Unknown variable '%s' in codegen\n", id->leaf->text);
@@ -899,22 +781,20 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             id->place = entry->location;
 
-            // Generate code for the initializer
             generate_code(init);
             t->code = init->code;
 
-            // Store into the variable slot
             t->code = concat(t->code,
                             gen(O_ASN, id->place, init->place, NULL_ADDR));
             t->place = id->place;
             return;
         }
-
+        /*for statement*/
         else if (strcmp(t->symbolname, "forStatementKotlinRange") == 0 && t->nkids == 4) {
-            struct tree *loopVar = t->kids[0];     // Identifier (e.g., i)
-            struct tree *startExpr = t->kids[1];   // expression (start)
-            struct tree *endExpr = t->kids[2];     // expression (end)
-            struct tree *body = t->kids[3];        // loop body
+            struct tree *loopVar = t->kids[0];     
+            struct tree *startExpr = t->kids[1];   
+            struct tree *endExpr = t->kids[2];     
+            struct tree *body = t->kids[3];        
         
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, loopVar->leaf->text);
             if (!entry) {
@@ -931,7 +811,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             all_code = concat(all_code, startExpr->code);
             all_code = concat(all_code, endExpr->code);
         
-            // i = start
             all_code = concat(all_code, gen(O_ASN, i_addr, startExpr->place, NULL_ADDR));
         
             struct addr *loop_start = genlabel();
@@ -940,22 +819,18 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct instr *label_loop = gen(D_LABEL, *loop_start, NULL_ADDR, NULL_ADDR);
             all_code = concat(all_code, label_loop);
         
-            // cond: i <= end
             struct addr cond_result = new_temp();
             all_code = concat(all_code, gen(O_ILE, cond_result, i_addr, endExpr->place));
             all_code = concat(all_code, gen(O_BZ, *loop_end, cond_result, NULL_ADDR));
         
-            // Generate loop body
             generate_code(body);
             all_code = concat(all_code, body->code);
         
-            // i = i + 1
             struct addr one = { .region = R_IMMED, .u.offset = 1 };
             struct addr inc_result = new_temp();
             all_code = concat(all_code, gen(O_IADD, inc_result, i_addr, one));
             all_code = concat(all_code, gen(O_ASN, i_addr, inc_result, NULL_ADDR));
         
-            // Loop jump
             all_code = concat(all_code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
             all_code = concat(all_code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
         
@@ -963,42 +838,36 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         else if (strcmp(t->symbolname, "forStatement") == 0 && t->nkids == 4) {
-            struct tree *init     = t->kids[0]; // i = 0
-            struct tree *cond     = t->kids[1]; // i < 5
-            struct tree *update   = t->kids[2]; // i = i + 1
-            struct tree *body     = t->kids[3]; // { ... }
+            struct tree *init     = t->kids[0]; 
+            struct tree *cond     = t->kids[1]; 
+            struct tree *update   = t->kids[2]; 
+            struct tree *body     = t->kids[3]; 
         
             generate_code(init);
             generate_code(cond);
             generate_code(update);
         
             struct instr *code = NULL;
-            code = concat(code, init->code); // emit init once
+            code = concat(code, init->code); 
         
             struct addr *loop_start = genlabel();
             struct addr *loop_end = genlabel();
         
-            // LBL loop_start:
             code = concat(code, gen(D_LABEL, *loop_start, NULL_ADDR, NULL_ADDR));
         
-            // cond
             code = concat(code, cond->code);
             code = concat(code, gen(O_BZ, *loop_end, cond->place, NULL_ADDR));
         
-            // Setup break context
             struct addr *prev_break = current_break_label;
             current_break_label = loop_end;
         
-            // body
             generate_code(body);
             code = concat(code, body->code);
         
-            current_break_label = prev_break; // restore outer loop break label
+            current_break_label = prev_break; 
         
-            // update
             code = concat(code, update->code);
         
-            // BR loop_start
             code = concat(code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
             code = concat(code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
         
@@ -1023,7 +892,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
             code = concat(code, gen(O_BZ, *loop_end, cond->place, NULL_ADDR));
         
-            // Manage break label
             struct addr *prev_break_label = current_break_label;
             current_break_label = loop_end;
         
@@ -1032,14 +900,13 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
             current_break_label = prev_break_label;
         
-            // jump back to loop start
             code = concat(code, gen(O_BR, *loop_start, NULL_ADDR, NULL_ADDR));
             code = concat(code, gen(D_LABEL, *loop_end, NULL_ADDR, NULL_ADDR));
         
             t->code = code;
             return;
         }
-        
+        /*break statement*/
         else if (strcmp(t->symbolname, "breakStatement") == 0) {
             if (!current_break_label) {
                 fprintf(stderr, "ERROR: 'break' used outside of loop.\n");
@@ -1051,7 +918,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
     }
 
-    /* 3) Fallback: generic postorder traversal */
     for (int i = 0; i < t->nkids; i++) {
         if (t->kids[i]) {
             debug_print("DEBUG: Processing kid %d of node %s\n", i, 
@@ -1060,7 +926,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
     }
     
-    // Safely concatenate code from all children
     struct instr *children_code = NULL;
     for (int i = 0; i < t->nkids; i++) {
         if (t->kids[i] && t->kids[i]->code) {
