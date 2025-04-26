@@ -412,6 +412,7 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
         
         assign_conditional_labels(root);
         generate_code(root);
+        write_asm_file(current_filename, root->code);
         write_ic_file(current_filename, root->code);
         
         free_func_symtab_list(func_symtabs);
