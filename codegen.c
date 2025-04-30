@@ -950,21 +950,22 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     FILE *f = fopen(outfn, "w");
     if (!f) { perror(outfn); return; }
 
+    // --- 1) file + .rodata ---
     fprintf(f, "\t.file\t\"%s\"\n", input_filename);
-    fprintf(f, "\t.text\n");
-    fprintf(f, "\t.section\t.rodata\n");
-    fprintf(f, "\t.align\t8\n");
+    fprintf(f, "\t.section\t.rodata\n\t.align\t8\n");
     for (int i = 0; i < strcount; i++) {
-        fprintf(f, ".LC%d:\n\t.string\t\"%s\"\n",
+        fprintf(f,
+                ".LC%d:\n"
+                "\t.string\t\"%s\"\n",
                 i, strtab[i].text);
     }
+    fprintf(f, "\t.text\n");
 
     fprintf(f, "\t.globl\tmain\n");
     fprintf(f, "\t.type\tmain, @function\n");
     fprintf(f, "main:\n");
     fprintf(f, ".LFB0:\n");
     fprintf(f, "\t.cfi_startproc\n");
-    fprintf(f, "\tendbr64\n");
     fprintf(f, "\tpushq\t%%rbp\n");
     fprintf(f, "\t.cfi_def_cfa_offset 16\n");
     fprintf(f, "\t.cfi_offset 6, -16\n");
@@ -973,136 +974,282 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     fprintf(f, "\tsubq\t$%d, %%rsp\n",
             currentFunctionSymtab->nextOffset);
 
+    // --- 2) prepare argument‐passing tables ---
+    const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
+    const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
+    int argc = 0, args_off[6], args_is_ptr[6];
+
+    // track when we’re inside a function and its stack frame size
+    int inFunction = 0;
+    int frameSize  = 0;
+
     for (struct instr *cur = code; cur; cur = cur->next) {
         switch (cur->opcode) {
 
-        case O_ASN:
-            if (cur->src1.region == R_IMMED) {
-                fprintf(f, "\tmovl\t$%d, %d(%%rbp)\n",
-                        cur->src1.u.offset,
-                        -cur->dest.u.offset);
+          // ————————— PSEUDO‐OPS —————————
+
+          case D_GLOB:
+            fprintf(f, "\t.globl\t%s\n",
+                    cur->src1.u.name);
+            break;
+
+          case D_PROC:
+            // start a new function
+            inFunction = 1;
+            argc       = 0;
+            frameSize  = 0;
+            fprintf(f,
+                "\t.type\t%s, @function\n"
+                "%s:\n"
+                ".LFB%d:\n"
+                "\t.cfi_startproc\n"
+                "\tpushq\t%%rbp\n"
+                "\t.cfi_def_cfa_offset 16\n"
+                "\t.cfi_offset 6, -16\n"
+                "\tmovq\t%%rsp, %%rbp\n"
+                "\t.cfi_def_cfa_register 6\n",
+                cur->src1.u.name,
+                cur->src1.u.name,
+                cur->src1.u.offset);
+            break;
+
+          case D_LABEL:
+            // basic‐block label inside current function
+            fprintf(f, ".L%d:\n", cur->dest.u.offset);
+            break;
+
+          case D_END:
+            // finish the current function with its epilogue
+            fprintf(f,
+                "\taddq\t$%d, %%rsp\n"
+                "\tmovl\t$0, %%eax\n"
+                "\tleave\n"
+                "\t.cfi_def_cfa 7, 8\n"
+                "\tret\n"
+                ".LFE%d:\n"
+                "\t.size\t%s, .-%s\n",
+                frameSize,
+                cur->src1.u.offset,
+                cur->src2.u.name,
+                cur->src2.u.name);
+            inFunction = 0;
+            break;
+
+          // —————— STACK ALLOCATION ——————
+
+          case O_ALLOC:
+            // at function entry, this is the frame size
+            if (inFunction && frameSize == 0) {
+                frameSize = cur->src1.u.offset;
+                fprintf(f, "\tsubq\t$%d, %%rsp\n", frameSize);
             } else {
-                fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n",
-                        -cur->src1.u.offset);
-                fprintf(f, "\tmovl\t%%eax, %d(%%rbp)\n",
-                        -cur->dest.u.offset);
+                // a mid‐function alloc (rare)
+                fprintf(f, "\tsubq\t$%d, %%rsp\n",
+                        cur->src1.u.offset);
             }
             break;
 
-        case O_ADDR:
-            fprintf(f, "\tleaq\t%d(%%rbp), %%rax\n"
-                       "\tmovq\t%%rax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->dest.u.offset);
+          case O_DEALLOC:
+            // ignore the dealloc at function‐end (handled in D_END),
+            // but handle any mid‐function deallocs
+            if (!inFunction) {
+                fprintf(f, "\taddq\t$%d, %%rsp\n",
+                        cur->src1.u.offset);
+            }
             break;
 
-        case O_LCONT:
-            fprintf(f, "\tmovsd\t.LC%d(%%rip), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                    cur->src1.u.offset,
-                    -cur->dest.u.offset);
+          // ——————— PARAM / CALL ———————
+
+          case O_PARM:
+            // record up to six args
+            if (argc < 6) {
+                args_off[argc]    = cur->src1.u.offset;
+                args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
+                argc++;
+            }
             break;
 
-        case O_SCONT:
-            fprintf(f, "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, .LC%d(%%rip)\n",
-                    -cur->src1.u.offset,
+          case O_CALL:
+            // move recorded args into registers
+            for (int i = 0; i < argc; i++) {
+                if (args_is_ptr[i]) {
+                    fprintf(f, "\tleaq\t-%d(%%rbp), %s\n",
+                            args_off[i], qreg[i]);
+                } else {
+                    fprintf(f, "\tmovl\t-%d(%%rbp), %s\n",
+                            args_off[i], ireg[i]);
+                }
+            }
+            // indirect call via label-number
+            fprintf(f, "\tcall\t.L%d\n",
+                    cur->src1.u.offset);
+            // store return value
+            fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
                     cur->dest.u.offset);
+            argc = 0;
             break;
 
-        case O_IADD:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\taddl\t%d(%%rbp), %%eax\n"
-                       "\tmovl\t%%eax, %d(%%rbp)\n",
+        case O_RET:
+            // load return value into %eax if present
+            if (cur->src1.region == R_IMMED) {
+                fprintf(f, "\tmovl\t$%d, %%eax\n",
+                        cur->src1.u.offset);
+            } else {
+                fprintf(f, "\tmovl\t-%d(%%rbp), %%eax\n",
+                        cur->src1.u.offset);
+            }
+            // fall through to function epilogue
+            fprintf(f,
+                "\tleave\n"
+                "\t.cfi_def_cfa 7, 8\n"
+                "\tret\n"
+                ".LFE0:\n"
+                "\t.size\tmain, .-main\n");
+            break;
+
+          // ———————— ARITHMETIC ————————
+
+          case O_ASN:
+            if (cur->src1.region == R_IMMED) {
+                fprintf(f, "\tmovl\t$%d, %d(%%rbp)\n",
+                        cur->src1.u.offset,
+                       -cur->dest.u.offset);
+            } else {
+                fprintf(f,
+                    "\tmovl\t%d(%%rbp), %%eax\n"
+                    "\tmovl\t%%eax, %d(%%rbp)\n",
                     -cur->src1.u.offset,
-                    -cur->src2.u.offset,
                     -cur->dest.u.offset);
+            }
             break;
 
-        case O_ISUB:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\tsubl\t%d(%%rbp), %%eax\n"
-                       "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src2.u.offset,
-                    -cur->src1.u.offset,
-                    -cur->dest.u.offset);
+          case O_ADDR:
+            fprintf(f,
+                "\tleaq\t%d(%%rbp), %%rax\n"
+                "\tmovq\t%%rax, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->dest.u.offset);
             break;
 
-        case O_IMUL:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\timull\t%d(%%rbp), %%eax\n"
-                       "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_LCONT:
+            fprintf(f,
+                "\tmovsd\t.LC%d(%%rip), %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                cur->src1.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_IDIV:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\tcltd\n"
-                       "\tidivl\t%d(%%rbp)\n"
-                       "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_SCONT:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%%xmm0, .LC%d(%%rip)\n",
+               -cur->src1.u.offset,
+                cur->dest.u.offset);
             break;
 
-        case O_IMOD:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\tcltd\n"
-                       "\tidivl\t%d(%%rbp)\n"
-                       "\tmovl\t%%edx, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_IADD:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\taddl\t%d(%%rbp), %%eax\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_DADD:
-            fprintf(f, "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                       "\taddsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_ISUB:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\tsubl\t%d(%%rbp), %%eax\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+               -cur->src2.u.offset,
+               -cur->src1.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_DSUB:
-            fprintf(f, "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                       "\tsubsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_IMUL:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\timull\t%d(%%rbp), %%eax\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_DMUL:
-            fprintf(f, "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmulsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_IDIV:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\tcltd\n"
+                "\tidivl\t%d(%%rbp)\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_DDIV:
-            fprintf(f, "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                       "\tdivsd\t%d(%%rbp), %%xmm0\n"
-                       "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset);
+          case O_IMOD:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\tcltd\n"
+                "\tidivl\t%d(%%rbp)\n"
+                "\tmovl\t%%edx, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
             break;
 
-        case O_DMOD:
+          case O_DADD:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\taddsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
+            break;
+
+          case O_DSUB:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tsubsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
+            break;
+
+          case O_DMUL:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmulsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
+            break;
+
+          case O_DDIV:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tdivsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->dest.u.offset);
+            break;
+
+          case O_DMOD:
             fprintf(f, "\t# double modulo not implemented\n");
             break;
 
-        case O_NEG:
-            fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n"
-                       "\tnegl\t%%eax\n"
-                       "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->dest.u.offset);
+          case O_NEG:
+            fprintf(f,
+                "\tmovl\t%d(%%rbp), %%eax\n"
+                "\tnegl\t%%eax\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+               -cur->src1.u.offset,
+               -cur->dest.u.offset);
             break;
 
         case O_NOT:
@@ -1113,13 +1260,12 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 "\tmovzbl\t%%al, %%eax\n"
                 "\tmovl\t%%eax, %d(%%rbp)\n",
                 -cur->src1.u.offset,
-                -cur->dest.u.offset
-            );
+                -cur->dest.u.offset);
             break;
 
-        case O_IEQ: case O_INE:
-        case O_ILT: case O_ILE:
-        case O_IGT: case O_IGE: {
+          case O_IEQ: case O_INE:
+          case O_ILT: case O_ILE:
+          case O_IGT: case O_IGE: {
             const char *mn;
             if      (cur->opcode == O_IEQ) mn = "sete";
             else if (cur->opcode == O_INE) mn = "setne";
@@ -1133,39 +1279,41 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 "\t%s\t%%al\n"
                 "\tmovzbl\t%%al, %%eax\n"
                 "\tmovl\t%%eax, %d(%%rbp)\n",
-                -cur->src1.u.offset,
-                -cur->src2.u.offset,
+               -cur->src1.u.offset,
+               -cur->src2.u.offset,
                 mn,
-                -cur->dest.u.offset);
+               -cur->dest.u.offset);
             break;
-        }
+          }
 
-        case D_LABEL:
-            fprintf(f, ".L%d:\n", cur->dest.u.offset);
-            break;
-
-        case O_BR:
+          case O_GOTO:
             fprintf(f, "\tjmp\t.L%d\n", cur->dest.u.offset);
             break;
 
-        case O_BZ:
-            fprintf(f, "\tcmpl\t$0, %d(%%rbp)\n"
-                       "\tje\t.L%d\n",
-                    -cur->src1.u.offset,
-                    cur->dest.u.offset);
+          case O_BR:
+            fprintf(f, "\tjmp\t.L%d\n", cur->dest.u.offset);
             break;
 
-        case O_BNZ:
-            fprintf(f, "\tcmpl\t$0, %d(%%rbp)\n"
-                       "\tjne\t.L%d\n",
-                    -cur->src1.u.offset,
-                    cur->dest.u.offset);
+          case O_BZ:
+            fprintf(f,
+                "\tcmpl\t$0, %d(%%rbp)\n"
+                "\tje\t.L%d\n",
+               -cur->src1.u.offset,
+                cur->dest.u.offset);
             break;
 
-        case O_BLT: case O_BLE:
-        case O_BGT: case O_BGE:
-        case O_BEQ: case O_BNE:
-        case O_BIF: case O_BNIF: {
+          case O_BNZ:
+            fprintf(f,
+                "\tcmpl\t$0, %d(%%rbp)\n"
+                "\tjne\t.L%d\n",
+               -cur->src1.u.offset,
+                cur->dest.u.offset);
+            break;
+
+          case O_BLT: case O_BLE:
+          case O_BGT: case O_BGE:
+          case O_BEQ: case O_BNE:
+          case O_BIF: case O_BNIF: {
             const char *jmn;
             if      (cur->opcode == O_BLT)  jmn = "jl";
             else if (cur->opcode == O_BLE)  jmn = "jle";
@@ -1178,84 +1326,28 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             fprintf(f,
                 "\tcmpl\t%d(%%rbp), %d(%%rbp)\n"
                 "\t%s\t.L%d\n",
-                -cur->src2.u.offset,
-                -cur->src1.u.offset,
+               -cur->src2.u.offset,
+               -cur->src1.u.offset,
                 jmn,
                 cur->dest.u.offset);
             break;
-        }
+          }
 
-        case O_PARM:
-            fprintf(f, "\tpushq\t%d(%%rbp)\n",
-                    -cur->src1.u.offset);
-            break;
-
-        case O_CALL:
-            fprintf(f, "\tcall\t*%d(%%rbp)\n"
-                       "\tmovq\t%%rax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->dest.u.offset);
-            break;
-
-        case O_RET:
-            if (cur->src1.region == R_IMMED)
-                fprintf(f, "\tmovl\t$%d, %%eax\n",
-                        cur->src1.u.offset);
-            else
-                fprintf(f, "\tmovl\t%d(%%rbp), %%eax\n",
-                        -cur->src1.u.offset);
-            fprintf(f, "\tleave\n\tret\n");
-            break;
-
-        case O_PUSH:
+          case O_PUSH:
             fprintf(f, "\tpushq\t%%rbp\n");
             break;
-        case O_POP:
+
+          case O_POP:
             fprintf(f, "\tpopq\t%%rbp\n");
             break;
-        case O_ALLOC:
-            fprintf(f, "\tsubq\t$%d, %%rsp\n",
-                    cur->src1.u.offset);
-            break;
-        case O_DEALLOC:
-            fprintf(f, "\taddq\t$%d, %%rsp\n",
-                    cur->src1.u.offset);
-            break;
 
-        case D_GLOB:
-            fprintf(f, "\t.globl\t%s\n", cur->src1.u.name);
-            break;
-        case D_PROC:
-            fprintf(f, "\t.type\t%s, @function\n", cur->src1.u.name);
-            break;
-        case D_LOCAL:
-            fprintf(f, "\t.local\t%s\n", cur->src1.u.name);
-            break;
-        case D_PROT:
-            fprintf(f, "\t.cfi_startproc\n");
-            break;
-        case D_END:
-            fprintf(f, ".LFE%d:\n"
-                       "\t.size\t%s, .-%s\n",
-                    cur->src1.u.offset,
-                    cur->src2.u.name,
-                    cur->src2.u.name);
-            break;
-
-        default:
+          default:
+            // any unhandled opcode
             fprintf(f, "\t# unhandled opcode %s\n",
                     opcodename(cur->opcode));
+            break;
         }
     }
-
-    fprintf(f, "\tmovl\t$0, %%eax\n");
-    fprintf(f, "\tleave\n");
-    fprintf(f, "\t.cfi_def_cfa 7, 8\n");
-    fprintf(f, "\tret\n");
-    fprintf(f, ".LFE0:\n");
-    fprintf(f, "\t.size\tmain, .-main\n");
-    fprintf(f, "\t.ident\t\"GCC: (Ubuntu 11.4.0) 11.4.0\"\n");
-    fprintf(f, "\t.section\t.note.GNU-stack,\"\",@progbits\n");
 
     fclose(f);
 }
