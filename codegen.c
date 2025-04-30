@@ -665,7 +665,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 //     fentry->location.u.offset
                 // );
             }
-            struct addr func_addr = fentry->location;
+            // struct addr func_addr = fentry->location;
         
             struct instr *code = NULL;
             struct tree **args = NULL;
@@ -683,7 +683,8 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
             t->place = new_temp();
         
-            code = concat(code, gen(O_CALL, t->place, func_addr, NULL_ADDR));
+            struct addr nameAddr = { .region = R_NAME, .u.name  = strdup(fentry->s) };
+            code = concat(code, gen(O_CALL, t->place, nameAddr, NULL_ADDR));
             t->code = code;
             return;
         }
@@ -691,49 +692,87 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
         /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
+            // remember old symtab
             SymbolTable oldSymtab = currentFunctionSymtab;
-            currentFunctionSymtab = t->scope;
-        
+            // name and label for this function
+            char *funcName = t->kids[0]->leaf->text;
             struct addr label_addr = *genlabel();
-            SymbolTableEntry fentry = lookup_symbol(globalSymtab, t->kids[0]->leaf->text);
-            if (fentry) fentry->location = label_addr;
         
-            t->code = gen(D_LABEL, label_addr, NULL_ADDR, NULL_ADDR);
+            // update symbol table entry
+            SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
+            if (fentry) fentry->location = label_addr;
+            printf("function %s: %s:%d\n",
+                   funcName,
+                   regionname(label_addr.region),
+                   label_addr.u.offset);
+            struct addr name_addr = { .region = R_NAME, .u.name = strdup(funcName) };
+            // 1) emit .globl foo
+            t->code = gen(D_GLOB, name_addr, NULL_ADDR, NULL_ADDR);
+        
+            // 2) emit .type foo,@function  foo: .LFBx:  prologue
             t->code = concat(t->code,
-                             gen(O_PUSH, NULL_ADDR,
-                                 (struct addr){ .region=R_FP, .u.offset=0 }, NULL_ADDR));
-            t->code = concat(t->code,
-                             gen(O_ASN, (struct addr){ .region=R_FP, .u.offset=0 },
-                                 (struct addr){ .region=R_SP, .u.offset=0 }, NULL_ADDR));
+                gen(D_PROC,
+                    label_addr,   // dest = label for this func
+                    name_addr,    // src1 = name of this func
+                    NULL_ADDR));
+        
+            // 3) standard prologue ops
             t->code = concat(t->code,
                              gen(O_ALLOC, NULL_ADDR,
-                                 (struct addr){ .region=R_IMMED, .u.offset=currentFunctionSymtab->nextOffset }, NULL_ADDR));
+                                 (struct addr){ .region=R_IMMED,
+                                                .u.offset=currentFunctionSymtab->nextOffset },
+                                 NULL_ADDR));
         
+            // SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
+            // if (fentry && fentry->param_count > 0) {
+            //     for (int i = 0; i < fentry->param_count; i++) {
+            //         // location on stack for the i'th parameter:
+            //         struct addr localVar = { .region = R_LOCAL,
+            //                                 .u.offset = /* offset from entry->location.u.offset if sequential */,
+            //                             };
+            //         // pull from the R_PARAM register slot:
+            //         struct addr paramReg = { .region = R_PARAM,
+            //                                 .u.offset = i      // 0 => %edi, 1 => %esi, etc.
+            //                             };
+            //         t->code = concat(t->code,
+            //                         gen(O_ASN, localVar, paramReg, NULL_ADDR));
+            //     }
+            // }
+
+            // 4) generate the body
             struct tree *body = NULL;
             for (int i = 0; i < t->nkids; i++) {
-                if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block") == 0) {
+                if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block")==0) {
                     body = t->kids[i];
                     break;
                 }
             }
-            if (!body) {
-                currentFunctionSymtab = oldSymtab;
-                return;
+            if (body) {
+                generate_code(body);
+                t->code = concat(t->code, body->code);
             }
         
-            generate_code(body);
-            t->code = concat(t->code, body->code);
-        
-            struct instr *last = body->code;
+            // 5) ensure there is a RET
+            struct instr *last = t->code;
             while (last && last->next) last = last->next;
             if (!last || last->opcode != O_RET) {
                 t->code = concat(t->code,
                                  gen(O_DEALLOC, NULL_ADDR,
-                                     (struct addr){ .region=R_IMMED, .u.offset=currentFunctionSymtab->nextOffset }, NULL_ADDR));
+                                     (struct addr){ .region=R_IMMED,
+                                                    .u.offset=currentFunctionSymtab->nextOffset},
+                                     NULL_ADDR));
                 t->code = concat(t->code,
                                  gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
             }
         
+            // 6) emit .LFE and .size via D_END
+            t->code = concat(t->code,
+                gen(D_END,
+                    label_addr,   // dest = label for .LFE#
+                    name_addr,    // src1 = name of this func
+                    NULL_ADDR));
+        
+            // restore
             currentFunctionSymtab = oldSymtab;
             return;
         }
@@ -961,19 +1000,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     }
     fprintf(f, "\t.text\n");
 
-    fprintf(f, "\t.globl\tmain\n");
-    fprintf(f, "\t.type\tmain, @function\n");
-    fprintf(f, "main:\n");
-    fprintf(f, ".LFB0:\n");
-    fprintf(f, "\t.cfi_startproc\n");
-    fprintf(f, "\tpushq\t%%rbp\n");
-    fprintf(f, "\t.cfi_def_cfa_offset 16\n");
-    fprintf(f, "\t.cfi_offset 6, -16\n");
-    fprintf(f, "\tmovq\t%%rsp, %%rbp\n");
-    fprintf(f, "\t.cfi_def_cfa_register 6\n");
-    fprintf(f, "\tsubq\t$%d, %%rsp\n",
-            currentFunctionSymtab->nextOffset);
-
     // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
@@ -988,62 +1014,65 @@ void write_asm_file(const char *input_filename, struct instr *code) {
 
           // ————————— PSEUDO‐OPS —————————
 
-          case D_GLOB:
-            fprintf(f, "\t.globl\t%s\n",
-                    cur->src1.u.name);
-            break;
+            case D_GLOB:
+                fprintf(f, "\t.globl\t%s\n",
+                    cur->dest.u.name);
+                break;
 
-          case D_PROC:
-            // start a new function
-            inFunction = 1;
-            argc       = 0;
-            frameSize  = 0;
-            fprintf(f,
-                "\t.type\t%s, @function\n"
-                "%s:\n"
-                ".LFB%d:\n"
-                "\t.cfi_startproc\n"
-                "\tpushq\t%%rbp\n"
-                "\t.cfi_def_cfa_offset 16\n"
-                "\t.cfi_offset 6, -16\n"
-                "\tmovq\t%%rsp, %%rbp\n"
-                "\t.cfi_def_cfa_register 6\n",
-                cur->src1.u.name,
-                cur->src1.u.name,
-                cur->src1.u.offset);
-            break;
+            case D_PROC:
+                printf("DEBUG: D_PROC %s\n", cur->src1.u.name);
+                // start a new function
+                inFunction = 1;
+                argc       = 0;
+                frameSize  = 0;               // will be set by O_ALLOC next
+            
+                fprintf(f,
+                    "\t.type\t%s, @function\n"
+                    "%s:\n"
+                    ".LFB%d:\n"
+                    "\t.cfi_startproc\n"
+                    "\tendbr64\n"
+                    "\tpushq\t%%rbp\n"
+                    "\t.cfi_def_cfa_offset 16\n"
+                    "\t.cfi_offset 6, -16\n"
+                    "\tmovq\t%%rsp, %%rbp\n"
+                    "\t.cfi_def_cfa_register 6\n"
+                    ,
+                    cur->src1.u.name,
+                    cur->src1.u.name,
+                    cur->dest.u.offset  // unique label#
+                );
+                break;
 
           case D_LABEL:
             // basic‐block label inside current function
             fprintf(f, ".L%d:\n", cur->dest.u.offset);
             break;
 
-          case D_END:
-            // finish the current function with its epilogue
+        case D_END:
             fprintf(f,
-                "\taddq\t$%d, %%rsp\n"
-                "\tmovl\t$0, %%eax\n"
+                "\taddq\t$%d, %%rsp\n"      // restore exactly what O_ALLOC subtracted
                 "\tleave\n"
-                "\t.cfi_def_cfa 7, 8\n"
+                "\t.cfi_def_cfa   7, 8\n"
+                "\t.cfi_endproc\n"
                 "\tret\n"
                 ".LFE%d:\n"
                 "\t.size\t%s, .-%s\n",
-                frameSize,
-                cur->src1.u.offset,
-                cur->src2.u.name,
-                cur->src2.u.name);
+                frameSize,                 // same frameSize you captured
+                cur->dest.u.offset,        // same label# as in D_PROC
+                cur->src1.u.name,          // function name
+                cur->src1.u.name
+            );
             inFunction = 0;
             break;
 
           // —————— STACK ALLOCATION ——————
 
           case O_ALLOC:
-            // at function entry, this is the frame size
             if (inFunction && frameSize == 0) {
                 frameSize = cur->src1.u.offset;
                 fprintf(f, "\tsubq\t$%d, %%rsp\n", frameSize);
             } else {
-                // a mid‐function alloc (rare)
                 fprintf(f, "\tsubq\t$%d, %%rsp\n",
                         cur->src1.u.offset);
             }
@@ -1080,9 +1109,11 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                             args_off[i], ireg[i]);
                 }
             }
-            // indirect call via label-number
-            fprintf(f, "\tcall\t.L%d\n",
-                    cur->src1.u.offset);
+            if (cur->src1.region == R_NAME) {
+                fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
+            } else {
+                fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
+            }
             // store return value
             fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
                     cur->dest.u.offset);
@@ -1099,12 +1130,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         cur->src1.u.offset);
             }
             // fall through to function epilogue
-            fprintf(f,
-                "\tleave\n"
-                "\t.cfi_def_cfa 7, 8\n"
-                "\tret\n"
-                ".LFE0:\n"
-                "\t.size\tmain, .-main\n");
             break;
 
           // ———————— ARITHMETIC ————————
@@ -1114,6 +1139,12 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 fprintf(f, "\tmovl\t$%d, %d(%%rbp)\n",
                         cur->src1.u.offset,
                        -cur->dest.u.offset);
+            } else if (cur->src1.region == R_PARAM) {
+                // pick the right incoming register:
+                static const char* paramregs[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
+                fprintf(f, "\tmovl\t%s, %d(%%rbp)\n",
+                        paramregs[cur->src1.u.offset],
+                        -cur->dest.u.offset);
             } else {
                 fprintf(f,
                     "\tmovl\t%d(%%rbp), %%eax\n"
@@ -1333,9 +1364,9 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             break;
           }
 
-          case O_PUSH:
-            fprintf(f, "\tpushq\t%%rbp\n");
-            break;
+        //   case O_PUSH:
+        //     fprintf(f, "\tpushq\t%%rbp\n");
+        //     break;
 
           case O_POP:
             fprintf(f, "\tpopq\t%%rbp\n");
