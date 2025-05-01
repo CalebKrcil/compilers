@@ -22,7 +22,7 @@ SymbolTable mksymtab(int nBuckets, SymbolTable parent) {
         free(st);
         exit(EXIT_FAILURE);
     }
-    st->nextOffset = 0;
+    st->nextOffset = 8;
     return st;
 }
 

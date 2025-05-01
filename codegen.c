@@ -36,17 +36,15 @@ static struct addr *current_break_label = NULL;
      strcount++;
  }
 
- static void flattenExprList(struct tree *elist, struct tree ***outArgs, int *outCount) {
+static void flattenExprList(struct tree *elist, struct tree ***outArgs, int *outCount) {
     if (!elist) return;
-    if (elist->symbolname && strcmp(elist->symbolname, "expressionList") == 0) {
-        if (elist->nkids == 1) {
-            flattenExprList(elist->kids[0], outArgs, outCount);
-        } else {
-            flattenExprList(elist->kids[0], outArgs, outCount);
-            flattenExprList(elist->kids[1], outArgs, outCount);
+    if (elist->symbolname && (strcmp(elist->symbolname, "expressionList") == 0 || strcmp(elist->symbolname, "valueArgumentList") == 0)) {
+        for (int i = 0; i < elist->nkids; i++) {
+            flattenExprList(elist->kids[i], outArgs, outCount);
         }
     } else {
-        *outArgs = realloc(*outArgs, sizeof(struct tree*) * (*outCount + 1));
+        *outArgs = realloc(*outArgs,
+        sizeof(struct tree*) * (*outCount + 1));
         (*outArgs)[*outCount] = elist;
         (*outCount)++;
     }
@@ -649,45 +647,65 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }       
         /*function Calls*/
-        else if (strcmp(t->symbolname, "functionCall")==0) {
+        else if (strcmp(t->symbolname, "functionCall") == 0) {
             struct tree *fnNode = t->kids[0];
-            SymbolTableEntry fentry = lookup_symbol(globalSymtab, fnNode->leaf->text);
+            SymbolTableEntry fentry =
+              lookup_symbol(globalSymtab, fnNode->leaf->text);
             if (!fentry)
-                fentry = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
-            if (!fentry) {
-                // fprintf(stderr, "DEBUG: lookup_symbol failed for function '%s'\n", fnNode->leaf->text);
-            } else {
-                // fprintf(stderr,
-                //     "DEBUG: functionCall '%s' → fentry=%p addr=%s:%d\n",
-                //     fnNode->leaf->text,
-                //     (void*)fentry,
-                //     regionname(fentry->location.region),
-                //     fentry->location.u.offset
-                // );
-            }
-            // struct addr func_addr = fentry->location;
+              fentry = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
         
+            // 1) flatten the argument list
             struct instr *code = NULL;
             struct tree **args = NULL;
             int argc = 0;
-            for (int i = 1; i < t->nkids; i++) {
-                flattenExprList(t->kids[i], &args, &argc);
-            }
+            for (int i = 1; i < t->nkids; i++)
+              flattenExprList(t->kids[i], &args, &argc);
         
+            // 2) generate code + PARM for each argument
             for (int i = 0; i < argc; i++) {
-                generate_code(args[i]);
-                code = concat(code, args[i]->code);
-                code = concat(code, gen(O_PARM, NULL_ADDR, args[i]->place, NULL_ADDR));
+              generate_code(args[i]);
+              code = concat(code, args[i]->code);
+              code = concat(code,
+                            gen(O_PARM,
+                                NULL_ADDR,
+                                args[i]->place,
+                                NULL_ADDR));
             }
             free(args);
         
-            t->place = new_temp();
+            // 3) build the CALL itself
+            struct addr nameAddr = {
+              .region = R_NAME,
+              .u.name = strdup(fentry->s)
+            };
         
-            struct addr nameAddr = { .region = R_NAME, .u.name  = strdup(fentry->s) };
-            code = concat(code, gen(O_CALL, t->place, nameAddr, NULL_ADDR));
+            // test whether the function actually returns something
+            int returnsValue = fentry
+              && fentry->type
+              && fentry->type->u.f.returntype != null_typeptr;
+        
+            if (returnsValue) {
+              // allocate exactly one temp for the return slot
+              t->place = new_temp();
+              code = concat(code,
+                            gen(O_CALL,
+                                t->place,
+                                nameAddr,
+                                NULL_ADDR));
+            } else {
+              // void/Unit function: no return slot
+              t->place = (struct addr){ R_NONE, { .offset = 0 } };
+              code = concat(code,
+                            gen(O_CALL,
+                                NULL_ADDR,
+                                nameAddr,
+                                NULL_ADDR));
+            }
+        
             t->code = code;
             return;
         }
+        
         
 
         /*functionDeclaration */
@@ -1049,83 +1067,103 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             fprintf(f, ".L%d:\n", cur->dest.u.offset);
             break;
 
-        case D_END:
-            fprintf(f,
-                "\taddq\t$%d, %%rsp\n"      // restore exactly what O_ALLOC subtracted
-                "\tleave\n"
-                "\t.cfi_def_cfa   7, 8\n"
-                "\t.cfi_endproc\n"
-                "\tret\n"
-                ".LFE%d:\n"
-                "\t.size\t%s, .-%s\n",
-                frameSize,                 // same frameSize you captured
-                cur->dest.u.offset,        // same label# as in D_PROC
-                cur->src1.u.name,          // function name
-                cur->src1.u.name
-            );
-            inFunction = 0;
-            break;
+            case D_END:
+                fprintf(f,
+                    /* unwind the stack frame... */
+                    "\taddq\t$%d, %%rsp\n"         /* <— undo the initial subq */
+                    "\tleave\n"
+                    "\t.cfi_def_cfa   7, 8\n"
+                    "\t.cfi_endproc\n"
+                    "\tret\n"
+                    ".LFE%d:\n"
+                    "\t.size\t%s, .-%s\n",
+                    frameSize,                    /* the same value you captured at O_ALLOC */
+                    cur->dest.u.offset,           /* label number */
+                    cur->src1.u.name,             /* function name */
+                    cur->src1.u.name              /* function name */
+                );
+                inFunction = 0;
+                break;
 
           // —————— STACK ALLOCATION ——————
 
-          case O_ALLOC:
-            if (inFunction && frameSize == 0) {
-                frameSize = cur->src1.u.offset;
-                fprintf(f, "\tsubq\t$%d, %%rsp\n", frameSize);
-            } else {
-                fprintf(f, "\tsubq\t$%d, %%rsp\n",
-                        cur->src1.u.offset);
-            }
-            break;
-
-          case O_DEALLOC:
-            // ignore the dealloc at function‐end (handled in D_END),
-            // but handle any mid‐function deallocs
-            if (!inFunction) {
-                fprintf(f, "\taddq\t$%d, %%rsp\n",
-                        cur->src1.u.offset);
-            }
-            break;
-
-          // ——————— PARAM / CALL ———————
-
-          case O_PARM:
-            // record up to six args
-            if (argc < 6) {
-                args_off[argc]    = cur->src1.u.offset;
-                args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
-                argc++;
-            }
-            break;
-
-          case O_CALL:
-            // move recorded args into registers
-            for (int i = 0; i < argc; i++) {
-                if (args_is_ptr[i]) {
-                    fprintf(f, "\tleaq\t-%d(%%rbp), %s\n",
-                            args_off[i], qreg[i]);
-                } else {
-                    fprintf(f, "\tmovl\t-%d(%%rbp), %s\n",
-                            args_off[i], ireg[i]);
+            case O_ALLOC:
+                if (inFunction && frameSize == 0) {
+                    frameSize = cur->src1.u.offset;
+                    fprintf(f, "\tsubq\t$%d, %%rsp\n", frameSize);
+                } else if (cur->src1.u.offset > 0) {
+                    // only emit non-zero
+                    fprintf(f, "\tsubq\t$%d, %%rsp\n", cur->src1.u.offset);
                 }
-            }
-            if (cur->src1.region == R_NAME) {
-                fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
-            } else {
-                fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
-            }
-            // store return value
-            fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
-                    cur->dest.u.offset);
-            argc = 0;
-            break;
+                break;
+
+            case O_DEALLOC:
+                // ignore the dealloc at function‐end (handled in D_END),
+                // but handle any mid‐function deallocs
+                if (!inFunction) {
+                    fprintf(f, "\taddq\t$%d, %%rsp\n",
+                            cur->src1.u.offset);
+                }
+                break;
+
+            // ——————— PARAM / CALL ———————
+
+            case O_PARM:
+                // record up to six args
+                if (argc < 6) {
+                    args_off[argc]    = cur->src1.u.offset;
+                    args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
+                    argc++;
+                }
+                break;
+
+            case O_CALL: {
+                /* first—if it’s exactly one pure-int arg, just movl to %edi */
+                if (argc == 1 && !args_is_ptr[0]) {
+                    fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n", args_off[0]);
+                }
+                /* otherwise handle up to six args, picking the right sequence: */
+                else {
+                    for (int i = 0; i < argc && i < 6; i++) {
+                        if (args_is_ptr[i]) {
+                            /* string literal (or other global) → load its label */
+                            fprintf(f,
+                                    "\tleaq\t.LC%d(%%rip), %s\n",
+                                    args_off[i],
+                                    qreg[i]);
+                        } else {
+                            /* ordinary integer local → movl from stack */
+                            fprintf(f,
+                                    "\tmovl\t-%d(%%rbp), %s\n",
+                                    args_off[i],
+                                    ireg[i]);
+                        }
+                    }
+                }
+
+                /* now actually call */
+                if (cur->src1.region == R_NAME) {
+                    fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
+                } else {
+                    fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
+                }
+
+                /* and store the return value, if any */
+                if (cur->dest.u.offset > 0) {
+                    fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
+                            cur->dest.u.offset);
+                }
+                argc = 0;
+                break;
+            }               
 
         case O_RET:
             // load return value into %eax if present
             if (cur->src1.region == R_IMMED) {
                 fprintf(f, "\tmovl\t$%d, %%eax\n",
                         cur->src1.u.offset);
-            } else {
+            }
+            else if (cur->src1.region != R_NONE) {
                 fprintf(f, "\tmovl\t-%d(%%rbp), %%eax\n",
                         cur->src1.u.offset);
             }

@@ -15,12 +15,10 @@ silly:
 	.cfi_offset 6, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register 6
-	subq	$32, %rsp
-	movl	-32(%rbp), %edi
+	subq	$40, %rsp
+	movl	-40(%rbp), %edi
 	call	println
-	movl	%eax, -40(%rbp)
-	movl	-0(%rbp), %eax
-	addq	$32, %rsp
+	addq	$40, %rsp
 	leave
 	.cfi_def_cfa   7, 8
 	.cfi_endproc
@@ -39,12 +37,11 @@ multiple_args:
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register 6
 	subq	$48, %rsp
-	movl	0(%rbp), %eax
-	addl	-8(%rbp), %eax
+	movl	-8(%rbp), %eax
+	addl	-16(%rbp), %eax
 	movl	%eax, -48(%rbp)
 	movl	-48(%rbp), %eax
-	movl	%eax, -16(%rbp)
-	movl	-0(%rbp), %eax
+	movl	%eax, -24(%rbp)
 	addq	$48, %rsp
 	leave
 	.cfi_def_cfa   7, 8
@@ -66,37 +63,34 @@ main:
 	subq	$56, %rsp
 	movl	$1, -56(%rbp)
 	movl	-56(%rbp), %eax
-	movl	%eax, 0(%rbp)
+	movl	%eax, -8(%rbp)
 	movl	$2, -64(%rbp)
 	movl	-64(%rbp), %eax
-	movl	%eax, -8(%rbp)
-	movl	0(%rbp), %eax
-	imull	-8(%rbp), %eax
+	movl	%eax, -16(%rbp)
+	movl	-8(%rbp), %eax
+	imull	-16(%rbp), %eax
 	movl	%eax, -72(%rbp)
 	movl	-72(%rbp), %eax
-	movl	%eax, -16(%rbp)
-	leaq	-0(%rbp), %rdi
+	movl	%eax, -24(%rbp)
+	leaq	.LC0(%rip), %rdi
 	call	println
-	movl	%eax, -80(%rbp)
-	leaq	-0(%rbp), %rdi
+	leaq	.LC0(%rip), %rdi
 	call	silly
-	movl	%eax, -88(%rbp)
-	movl	$1, -96(%rbp)
-	movl	$2, -104(%rbp)
-	movl	-96(%rbp), %edi
-	movl	-104(%rbp), %esi
+	movl	%eax, -80(%rbp)
+	movl	$1, -88(%rbp)
+	movl	$2, -96(%rbp)
+	movl	-88(%rbp), %edi
+	movl	-96(%rbp), %esi
+	call	multiple_args
+	movl	%eax, -104(%rbp)
+	movl	-104(%rbp), %eax
+	movl	%eax, -32(%rbp)
+	movl	-8(%rbp), %edi
+	movl	-16(%rbp), %esi
 	call	multiple_args
 	movl	%eax, -112(%rbp)
-	movl	-112(%rbp), %eax
-	movl	%eax, -24(%rbp)
-	movl	-0(%rbp), %edi
-	movl	-8(%rbp), %esi
-	call	multiple_args
-	movl	%eax, -120(%rbp)
-	movl	-120(%rbp), %edi
+	movl	-112(%rbp), %edi
 	call	println
-	movl	%eax, -128(%rbp)
-	movl	-0(%rbp), %eax
 	addq	$56, %rsp
 	leave
 	.cfi_def_cfa   7, 8
