@@ -710,57 +710,63 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
         /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
-            // remember old symtab
+            // 0) save old function scope
             SymbolTable oldSymtab = currentFunctionSymtab;
-            // name and label for this function
+
+            // 1) get name and fresh label
             char *funcName = t->kids[0]->leaf->text;
             struct addr label_addr = *genlabel();
-        
-            // update symbol table entry
+
+            // 2) update the global symbol table entry
             SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
             if (fentry) fentry->location = label_addr;
-            printf("function %s: %s:%d\n",
-                   funcName,
-                   regionname(label_addr.region),
-                   label_addr.u.offset);
+
+            // 3) start emitting: .globl and .type/@function
             struct addr name_addr = { .region = R_NAME, .u.name = strdup(funcName) };
-            // 1) emit .globl foo
-            t->code = gen(D_GLOB, name_addr, NULL_ADDR, NULL_ADDR);
-        
-            // 2) emit .type foo,@function  foo: .LFBx:  prologue
+            t->code = gen(D_GLOB,  name_addr, NULL_ADDR, NULL_ADDR);
             t->code = concat(t->code,
                 gen(D_PROC,
-                    label_addr,   // dest = label for this func
-                    name_addr,    // src1 = name of this func
+                    label_addr,
+                    name_addr,
                     NULL_ADDR));
-        
-            // 3) standard prologue ops
-            t->code = concat(t->code,
-                             gen(O_ALLOC, NULL_ADDR,
-                                 (struct addr){ .region=R_IMMED,
-                                                .u.offset=currentFunctionSymtab->nextOffset },
-                                 NULL_ADDR));
-        
-            // SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
-            // if (fentry && fentry->param_count > 0) {
-            //     for (int i = 0; i < fentry->param_count; i++) {
-            //         // location on stack for the i'th parameter:
-            //         struct addr localVar = { .region = R_LOCAL,
-            //                                 .u.offset = /* offset from entry->location.u.offset if sequential */,
-            //                             };
-            //         // pull from the R_PARAM register slot:
-            //         struct addr paramReg = { .region = R_PARAM,
-            //                                 .u.offset = i      // 0 => %edi, 1 => %esi, etc.
-            //                             };
-            //         t->code = concat(t->code,
-            //                         gen(O_ASN, localVar, paramReg, NULL_ADDR));
-            //     }
-            // }
 
-            // 4) generate the body
+            // 4) switch into this function’s symbol table
+            //    (t->scope was set by printsyms when we built the AST)
+            if (t->scope) currentFunctionSymtab = t->scope;
+
+            // 5) emit frame allocation
+            t->code = concat(t->code,
+                gen(O_ALLOC,
+                    NULL_ADDR,
+                    (struct addr){ .region = R_IMMED,
+                                .u.offset = currentFunctionSymtab->nextOffset },
+                    NULL_ADDR));
+
+            // 6) copy incoming parameters from R_PARAM into their locals
+            {
+                struct tree **params = NULL;
+                int paramCount = 0;
+                // flattenParameterList is in tree.c / tree.h
+                flattenParameterList(t->kids[1], &params, &paramCount);
+                for (int i = 0; i < paramCount; i++) {
+                    // each params[i]->kids[0] is the identifier node
+                    char *pname = params[i]->kids[0]->leaf->text;
+                    SymbolTableEntry pe = lookup_symbol(currentFunctionSymtab, pname);
+                    if (!pe) continue;
+                    struct addr preg = { .region = R_PARAM, .u.offset = i };
+                    t->code = concat(t->code,
+                                    gen(O_ASN,
+                                        pe->location,
+                                        preg,
+                                        NULL_ADDR));
+                }
+                free(params);
+            }
+
+            // 7) generate the function body
             struct tree *body = NULL;
             for (int i = 0; i < t->nkids; i++) {
-                if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block")==0) {
+                if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block") == 0) {
                     body = t->kids[i];
                     break;
                 }
@@ -769,31 +775,38 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 generate_code(body);
                 t->code = concat(t->code, body->code);
             }
-        
-            // 5) ensure there is a RET
-            struct instr *last = t->code;
-            while (last && last->next) last = last->next;
-            if (!last || last->opcode != O_RET) {
-                t->code = concat(t->code,
-                                 gen(O_DEALLOC, NULL_ADDR,
-                                     (struct addr){ .region=R_IMMED,
-                                                    .u.offset=currentFunctionSymtab->nextOffset},
-                                     NULL_ADDR));
-                t->code = concat(t->code,
-                                 gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
+
+            // 8) if we didn’t already end with a RET, append dealloc + RET
+            {
+                struct instr *last = t->code;
+                while (last && last->next) last = last->next;
+                if (!last || last->opcode != O_RET) {
+                    t->code = concat(t->code,
+                        gen(O_DEALLOC,
+                            NULL_ADDR,
+                            (struct addr){ .region = R_IMMED,
+                                        .u.offset = currentFunctionSymtab->nextOffset },
+                            NULL_ADDR));
+                    t->code = concat(t->code,
+                        gen(O_RET,
+                            NULL_ADDR,
+                            NULL_ADDR,
+                            NULL_ADDR));
+                }
             }
-        
-            // 6) emit .LFE and .size via D_END
+
+            // 9) finish up: .LFE / .size
             t->code = concat(t->code,
                 gen(D_END,
-                    label_addr,   // dest = label for .LFE#
-                    name_addr,    // src1 = name of this func
+                    label_addr,
+                    name_addr,
                     NULL_ADDR));
-        
-            // restore
+
+            // 10) restore old function scope and return
             currentFunctionSymtab = oldSymtab;
             return;
         }
+
         
         
     
@@ -1013,9 +1026,12 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     for (int i = 0; i < strcount; i++) {
         fprintf(f,
                 ".LC%d:\n"
-                "\t.string\t\"%s\"\n",
+                "\t.string\t%s\n",
                 i, strtab[i].text);
     }
+    fprintf(f,
+        ".LCint_fmt:\n"
+        "\t.string \"%%d\\n\"\n");
     fprintf(f, "\t.text\n");
 
     // --- 2) prepare argument‐passing tables ---
@@ -1118,6 +1134,34 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 break;
 
             case O_CALL: {
+                if (cur->src1.region == R_NAME
+                    && strcmp(cur->src1.u.name, "println") == 0
+                    && argc == 1) 
+                   {
+                       // true if the single argument was a string literal
+                       int args_is_string_literal = args_is_ptr[0];
+                       // the strtab index of that literal (matches your .LC0, .LC1, … labels)
+                       int literal_id             = args_off[0];
+               
+                       if (args_is_string_literal) {
+                           // load address of ".LC<literal_id>"
+                           fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", literal_id);
+                       } else {
+                           // integer case: load address of a "%d\n" format string
+                           fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
+                           // then move the integer into %esi
+                           fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
+                       }
+               
+                       // clear AL for printf varargs ABI
+                       fprintf(f, "\txor\t%%eax, %%eax\n");
+                       // call C’s printf
+                       fprintf(f, "\tcall\tprintf\n");
+               
+                       // done with this call
+                       argc = 0;
+                       break;
+                   }
                 /* first—if it’s exactly one pure-int arg, just movl to %edi */
                 if (argc == 1 && !args_is_ptr[0]) {
                     fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n", args_off[0]);

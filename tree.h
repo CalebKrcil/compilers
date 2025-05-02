@@ -68,5 +68,6 @@ void print_leaf(struct tree *t, FILE *f);
 void print_graph2(struct tree *t, FILE *f);
 char *pretty_print_name(struct tree *t);
 char *escape(char *s);
+void flattenParameterList(struct tree *node, struct tree ***params, int *count);
 
 #endif

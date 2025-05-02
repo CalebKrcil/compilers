@@ -3,6 +3,10 @@
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <libgen.h>
+#include <unistd.h>
+#include <errno.h>
+#include <stdbool.h>
 #include "k0gram.tab.h"
 #include "semantics.h"
 #include "tree.h"
@@ -33,6 +37,45 @@ struct tokenlist {
 
 struct tokenlist *head = NULL;
 struct tokenlist *tail = NULL;
+
+static void finish_and_emit(const char *stem, bool emit_asm, bool emit_obj) {
+    char sfile[512], ofile[512], cmd[2048];
+    size_t need;
+
+    /* build names "<stem>.s" and "<stem>.o" */
+    snprintf(sfile, sizeof sfile, "%s.s", stem);
+    snprintf(ofile, sizeof ofile, "%s.o", stem);
+
+    /* if user only wanted the .s, stop here */
+    if (emit_asm) return;
+
+    /* 1) assemble → .o */
+    need = strlen(sfile) + strlen(ofile) + sizeof("as  -o ") + 1;
+    if (need > sizeof cmd) {
+        fprintf(stderr, "error: command line too long\n");
+        exit(1);
+    }
+    snprintf(cmd, sizeof cmd, "as %s -o %s", sfile, ofile);
+    if (system(cmd) != 0) {
+        fprintf(stderr, "error: assembler failed\n");
+        exit(1);
+    }
+
+    /* if user only wanted the .o, stop here */
+    if (emit_obj) return;
+
+    /* 2) link → executable named "stem" */
+    need = strlen(ofile) + strlen(stem) + sizeof("cc  -o ") + 1;
+    if (need > sizeof cmd) {
+        fprintf(stderr, "error: command line too long\n");
+        exit(1);
+    }
+    snprintf(cmd, sizeof cmd, "cc %s -o %s", ofile, stem);
+    if (system(cmd) != 0) {
+        fprintf(stderr, "error: linker failed\n");
+        exit(1);
+    }
+}
 
 void yyerror(const char *s) {
     error_count++;
@@ -433,32 +476,54 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <input_file> [-tree] [-symtab] [-dot]\n", argv[0]);
+        fprintf(stderr,
+                "Usage: %s <input_file.kt> [-tree] [-symtab] [-dot] [-s] [-c]\n",
+                argv[0]);
         return 1;
     }
 
-    int print_tree = 0, print_symtab = 0, generate_dot = 0;
-    int highest_error_code = 0;
-    int i;
+    int print_tree   = 0;
+    int print_symtab = 0;
+    int generate_dot = 0;
+    bool flag_s      = false;  /* -s: stop after emitting .s */
+    bool flag_c      = false;  /* -c: stop after emitting .o */
+    int  exit_code   = 0;
 
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-tree") == 0) {
-            print_tree = 1;
-        } else if (strcmp(argv[i], "-symtab") == 0) {
-            print_symtab = 1;
-        } else if (strcmp(argv[i], "-dot") == 0) {
-            generate_dot = 1;
-        }
+    /* scan flags */
+    for (int i = 1; i < argc; i++) {
+        if      (strcmp(argv[i], "-tree")   == 0) print_tree   = 1;
+        else if (strcmp(argv[i], "-symtab") == 0) print_symtab = 1;
+        else if (strcmp(argv[i], "-dot")    == 0) generate_dot = 1;
+        else if (strcmp(argv[i], "-s")      == 0) flag_s       = true;
+        else if (strcmp(argv[i], "-c")      == 0) flag_c       = true;
     }
 
-    for (i = 1; i < argc; i++) {
-        if (argv[i][0] != '-') {  
-            int result = process_file(argv[i], print_tree, print_symtab, generate_dot);
-            if (result > highest_error_code) {
-                highest_error_code = result;
-            }
+    /* for each non-flag argument */
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') continue;
+
+        /* 1) parse/semantic/generate code + write out `stem.s` */
+        int r = process_file(argv[i],
+                             print_tree,
+                             print_symtab,
+                             generate_dot);
+        if (r) {
+            exit_code = r;
+            continue;
         }
+
+        /* 2) strip extension: "foo.kt" → "foo" */
+        char stem[256];
+        strncpy(stem, argv[i], sizeof(stem)-1);
+        stem[sizeof(stem)-1] = '\0';
+        char *dot = strrchr(stem, '.');
+        if (dot != NULL) {
+            *dot = '\0';
+        }
+
+        /* 3) assemble/link as needed */
+        finish_and_emit(stem, flag_s, flag_c);
     }
 
-    return highest_error_code;
+    return exit_code;
 }
