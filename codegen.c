@@ -1,40 +1,51 @@
- #include <stdio.h>
- #include <stdlib.h>
- #include <string.h>
- #include <stdarg.h>
- 
- #include "tree.h"
- #include "tac.h"
- #include "k0gram.tab.h"
- #include "type.h"
- #include "codegen.h"
- #include "symtab.h"
- 
- #define NULL_ADDR ((struct addr){R_NONE, {.offset = 0}})
- #define DEBUG_OUTPUT 0  // Set to 1 to enable debug output, 0 to disable
- 
- extern SymbolTable currentFunctionSymtab;
- extern SymbolTable globalSymtab;
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 
- extern struct addr new_temp(void);
- extern struct addr *genlabel(void);
- extern struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3);
- extern struct instr *concat(struct instr *l1, struct instr *l2);
+#include "tree.h"
+#include "tac.h"
+#include "k0gram.tab.h"
+#include "type.h"
+#include "codegen.h"
+#include "symtab.h"
+
+#define NULL_ADDR ((struct addr){R_NONE, {.offset = 0}})
+#define DEBUG_OUTPUT 1  // Set to 1 to enable debug output, 0 to disable
+ 
+extern SymbolTable currentFunctionSymtab;
+extern SymbolTable globalSymtab;
+
+extern struct addr new_temp(void);
+extern struct addr *genlabel(void);
+extern struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3);
+extern struct instr *concat(struct instr *l1, struct instr *l2);
 static struct addr *current_break_label = NULL;
 
- extern char *regionname(int i);
- extern char *opcodename(int i);
- extern char *pseudoname(int i);
+extern char *regionname(int i);
+extern char *opcodename(int i);
+extern char *pseudoname(int i);
 
- typedef struct { char *label, *text; } StrLit;
- static StrLit strtab[128];
- static int   strcount = 0;
+typedef struct { char *label, *text; } StrLit;
+static StrLit strtab[128];
+static int   strcount = 0;
+
+typedef struct { char label[32]; double val; } RealEntry;
+static RealEntry *dbltab   = NULL;
+static int       dblcount = 0;
  
- static void add_string_literal(const char *label, const char *text) {
-     strtab[strcount].label = strdup(label);
-     strtab[strcount].text  = strdup(text);
-     strcount++;
- }
+static void add_string_literal(const char *label, const char *text) {
+    strtab[strcount].label = strdup(label);
+    strtab[strcount].text  = strdup(text);
+    strcount++;
+}
+
+static int add_real_literal(const char *label, double v) {
+    dbltab = realloc(dbltab, (dblcount+1)*sizeof *dbltab);
+    strcpy(dbltab[dblcount].label, label);
+    dbltab[dblcount].val   = v;
+    return dblcount++;
+}
 
 static void flattenExprList(struct tree *elist, struct tree ***outArgs, int *outCount) {
     if (!elist) return;
@@ -202,17 +213,32 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case RealLiteral: {
-                // printf("real literal\n");
+                // 1) record the literal in dbltab
+                char lbl[32];
+                snprintf(lbl, sizeof(lbl), "D%d", dblcount);
+                int id = add_real_literal(lbl, t->leaf->value.dval);
+    
+                // 2) allocate a temp (stack slot) for this double
                 t->place = new_temp();
-                struct addr imm = { .region = R_IMMED,
-                                    .u.offset = (int)t->leaf->value.dval };
-                t->code = gen(O_ASN, t->place, imm, NULL_ADDR);
-                debug_print("LIT real %f -> %s:%d\n",
+    
+                // 3) emit O_LCONT so write_asm_file does:
+                //      movsd .D<id>(%rip), %xmm0
+                //      movsd %xmm0, -<t->place>(%rbp)
+                t->code = gen(
+                    O_LCONT,
+                    t->place,
+                    (struct addr){ .region = R_IMMED, .u.offset = id },
+                    NULL_ADDR
+                );
+    
+                debug_print("LIT real %f → .D%d @ %s:%d\n",
                             t->leaf->value.dval,
+                            id,
                             regionname(t->place.region),
                             t->place.u.offset);
                 return;
             }
+
             case StringLiteral: {
                 static int stringLabelCounter = 0;
             
@@ -305,15 +331,21 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             
             t->place = lhs->place;
-            t->code = concat(rhs->code, 
-                            gen(O_ASN, 
-                                lhs->place, 
-                                rhs->place, 
-                                NULL_ADDR));
-            
-            debug_print("DEBUG: Generated assignment: %s:%d = %s:%d\n",
-                       regionname(lhs->place.region), lhs->place.u.offset,
-                       regionname(rhs->place.region), rhs->place.u.offset);
+            /* emit an ASN and tag it if this is a double assignment */
+            {
+                struct instr *asn = gen(O_ASN,
+                                       lhs->place,
+                                       rhs->place,
+                                       NULL_ADDR);
+                /* you need to have #include "type.h" so double_typeptr is in scope */
+                asn->is_double = (rhs->type == double_typeptr);
+                t->code = concat(rhs->code, asn);
+            }
+    
+            debug_print("DEBUG: Generated assignment: %s:%d = %s:%d (is_double=%d)\n",
+                        regionname(lhs->place.region), lhs->place.u.offset,
+                        regionname(rhs->place.region), rhs->place.u.offset,
+                        (int)(rhs->type == double_typeptr));
             return;
         }
 
@@ -322,9 +354,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             generate_code(t->kids[1]);
 
             int opcode;
-            if      (t->prodrule == ADD) opcode = O_IADD;
-            else if (t->prodrule == SUB) opcode = O_ISUB;
-            else                         opcode = O_IADD;  
+            if (t->type == double_typeptr) {
+                opcode = (t->prodrule == ADD ? O_DADD : O_DSUB);
+            } else {
+                opcode = (t->prodrule == ADD ? O_IADD : O_ISUB);
+            }
 
             t->place = new_temp();
             t->code  = concat(
@@ -340,25 +374,37 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
 
         /*multiplicative_expression*/
-        else if (strcmp(t->symbolname, "multiplicative_expression") == 0 && t->nkids == 2) {
+        else if (strcmp(t->symbolname, "multiplicative_expression") == 0
+                && t->nkids == 2) {
+            // 1) generate code for subexpressions
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
-        
+
+            // 2) pick the right opcode based on the expression’s type
             int opcode;
             if (t->type == double_typeptr) {
-                if (t->prodrule == MULT) opcode = O_DMUL;
-                else if (t->prodrule == DIV) opcode = O_DDIV;
-                else opcode = O_DMOD; 
+                // Double * or /
+                if      (t->prodrule == MULT) opcode = O_DMUL;
+                else if (t->prodrule == DIV ) opcode = O_DDIV;
+                else                           opcode = O_DMOD;   // or handle via fmod
             } else {
-                if (t->prodrule == MULT) opcode = O_IMUL;
-                else if (t->prodrule == DIV) opcode = O_IDIV;
-                else opcode = O_IMOD;
+                // Int * or /
+                if      (t->prodrule == MULT) opcode = O_IMUL;
+                else if (t->prodrule == DIV ) opcode = O_IDIV;
+                else                           opcode = O_IMOD;
             }
-        
+
+            // 3) allocate a result temp
             t->place = new_temp();
+
+            // 4) chain the three‐address instructions:
+            //    [ left code ] ; [ right code ] ; OPCODE result, left, right
             t->code = concat(
                 concat(t->kids[0]->code, t->kids[1]->code),
-                gen(opcode, t->place, t->kids[0]->place, t->kids[1]->place)
+                gen(opcode,
+                    t->place,
+                    t->kids[0]->place,
+                    t->kids[1]->place)
             );
             return;
         }
@@ -663,13 +709,13 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
             // 2) generate code + PARM for each argument
             for (int i = 0; i < argc; i++) {
-              generate_code(args[i]);
-              code = concat(code, args[i]->code);
-              code = concat(code,
-                            gen(O_PARM,
-                                NULL_ADDR,
-                                args[i]->place,
-                                NULL_ADDR));
+                generate_code(args[i]);
+                code = concat(code, args[i]->code);
+          
+                // build the PARM and tag it if the tree node was double-typed
+                struct instr *p = gen(O_PARM, NULL_ADDR, args[i]->place, NULL_ADDR);
+                p->is_double = (args[i]->type == double_typeptr);
+                code = concat(code, p);
             }
             free(args);
         
@@ -838,24 +884,23 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
         
         else if ((strcmp(t->symbolname, "variableDeclaration") == 0 ||
-                strcmp(t->symbolname, "constVariableDeclaration") == 0)
-                && t->nkids >= 3)
+                  strcmp(t->symbolname, "constVariableDeclaration") == 0)
+                 && t->nkids >= 3)
         {
             struct tree *id   = t->kids[0];
             struct tree *init = t->kids[2];
 
             SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
-            if (!entry) {
-                fprintf(stderr, "ERROR: Unknown variable '%s' in codegen\n", id->leaf->text);
-                return;
-            }
             id->place = entry->location;
 
             generate_code(init);
             t->code = init->code;
 
-            t->code = concat(t->code,
-                            gen(O_ASN, id->place, init->place, NULL_ADDR));
+            // emit ASN and tag it if init is a double
+            struct instr *asn = gen(O_ASN, id->place, init->place, NULL_ADDR);
+            asn->is_double = (init->type == double_typeptr);
+            t->code = concat(t->code, asn);
+
             t->place = id->place;
             return;
         }
@@ -1029,6 +1074,17 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 "\t.string\t%s\n",
                 i, strtab[i].text);
     }
+    for (int i = 0; i < dblcount; i++) {
+        fprintf(f,
+            ".%s:\n"
+            "\t.double\t%f\n",
+            dbltab[i].label,
+            dbltab[i].val);
+    }
+    // new format string for doubles
+    fprintf(f,
+        ".LCdouble_fmt:\n"
+        "\t.string \"%%f\\n\"\n");
     fprintf(f,
         ".LCint_fmt:\n"
         "\t.string \"%%d\\n\"\n");
@@ -1037,7 +1093,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
-    int argc = 0, args_off[6], args_is_ptr[6];
+    int argc = 0, args_off[6], args_is_ptr[6], args_is_double[6] = {0};
 
     // track when we’re inside a function and its stack frame size
     int inFunction = 0;
@@ -1127,8 +1183,9 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             case O_PARM:
                 // record up to six args
                 if (argc < 6) {
-                    args_off[argc]    = cur->src1.u.offset;
+                    args_off[argc] = cur->src1.u.offset;
                     args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
+                    args_is_double[argc] = cur->is_double;
                     argc++;
                 }
                 break;
@@ -1143,15 +1200,21 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                        // the strtab index of that literal (matches your .LC0, .LC1, … labels)
                        int literal_id             = args_off[0];
                
-                       if (args_is_string_literal) {
+                        if (args_is_string_literal) {
                            // load address of ".LC<literal_id>"
                            fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", literal_id);
-                       } else {
+                        } else if (args_is_double[0]) {
+                            // double version:
+                            fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
+                            fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
+                            fprintf(f, "\txor\t%%eax, %%eax\n");
+                            fprintf(f, "\tcall\tprintf\n");
+                        } else {
                            // integer case: load address of a "%d\n" format string
                            fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
                            // then move the integer into %esi
                            fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
-                       }
+                        }
                
                        // clear AL for printf varargs ABI
                        fprintf(f, "\txor\t%%eax, %%eax\n");
@@ -1201,40 +1264,51 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 break;
             }               
 
-        case O_RET:
-            // load return value into %eax if present
-            if (cur->src1.region == R_IMMED) {
-                fprintf(f, "\tmovl\t$%d, %%eax\n",
-                        cur->src1.u.offset);
-            }
-            else if (cur->src1.region != R_NONE) {
-                fprintf(f, "\tmovl\t-%d(%%rbp), %%eax\n",
-                        cur->src1.u.offset);
-            }
-            // fall through to function epilogue
-            break;
+            case O_RET:
+                // load return value into %eax if present
+                if (cur->src1.region == R_IMMED) {
+                    fprintf(f, "\tmovl\t$%d, %%eax\n",
+                            cur->src1.u.offset);
+                }
+                else if (cur->src1.region != R_NONE) {
+                    fprintf(f, "\tmovl\t-%d(%%rbp), %%eax\n",
+                            cur->src1.u.offset);
+                }
+                // fall through to function epilogue
+                break;
 
           // ———————— ARITHMETIC ————————
 
-          case O_ASN:
-            if (cur->src1.region == R_IMMED) {
-                fprintf(f, "\tmovl\t$%d, %d(%%rbp)\n",
-                        cur->src1.u.offset,
-                       -cur->dest.u.offset);
-            } else if (cur->src1.region == R_PARAM) {
-                // pick the right incoming register:
-                static const char* paramregs[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
-                fprintf(f, "\tmovl\t%s, %d(%%rbp)\n",
-                        paramregs[cur->src1.u.offset],
+            case O_ASN:
+                if (cur->is_double) {
+                    // 8-byte FP assignment: movsd [src]→xmm0; movsd xmm0→[dest]
+                    fprintf(f,
+                        "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                        "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
                         -cur->dest.u.offset);
-            } else {
-                fprintf(f,
-                    "\tmovl\t%d(%%rbp), %%eax\n"
-                    "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->dest.u.offset);
-            }
-            break;
+                } else {
+                    // existing 32-bit integer assignment path:
+                    if (cur->src1.region == R_IMMED) {
+                        fprintf(f,
+                            "\tmovl\t$%d, %d(%%rbp)\n",
+                            cur->src1.u.offset,
+                            -cur->dest.u.offset);
+                    } else if (cur->src1.region == R_PARAM) {
+                        static const char *p[6] = {"%edi","%esi","%edx","%ecx","%r8d","%r9d"};
+                        fprintf(f,
+                            "\tmovl\t%s, %d(%%rbp)\n",
+                            p[cur->src1.u.offset],
+                            -cur->dest.u.offset);
+                    } else {
+                        fprintf(f,
+                            "\tmovl\t%d(%%rbp), %%eax\n"
+                            "\tmovl\t%%eax, %d(%%rbp)\n",
+                            -cur->src1.u.offset,
+                            -cur->dest.u.offset);
+                    }
+                }
+                break;
 
           case O_ADDR:
             fprintf(f,
@@ -1244,13 +1318,13 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 -cur->dest.u.offset);
             break;
 
-          case O_LCONT:
-            fprintf(f,
-                "\tmovsd\t.LC%d(%%rip), %%xmm0\n"
-                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                cur->src1.u.offset,
-               -cur->dest.u.offset);
-            break;
+            case O_LCONT:
+                fprintf(f,
+                    "\tmovsd\t.D%d(%%rip), %%xmm0\n"
+                    "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                    cur->src1.u.offset,
+                -cur->dest.u.offset);
+                break;
 
           case O_SCONT:
             fprintf(f,
@@ -1270,15 +1344,15 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->dest.u.offset);
             break;
 
-          case O_ISUB:
-            fprintf(f,
-                "\tmovl\t%d(%%rbp), %%eax\n"
-                "\tsubl\t%d(%%rbp), %%eax\n"
-                "\tmovl\t%%eax, %d(%%rbp)\n",
-               -cur->src2.u.offset,
-               -cur->src1.u.offset,
-               -cur->dest.u.offset);
-            break;
+            case O_ISUB:
+                fprintf(f,
+                    "\tmovl\t%d(%%rbp), %%eax\n"
+                    "\tsubl\t%d(%%rbp), %%eax\n"
+                    "\tmovl\t%%eax, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->src2.u.offset,
+                -cur->dest.u.offset);
+                break;
 
           case O_IMUL:
             fprintf(f,

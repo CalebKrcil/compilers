@@ -3,6 +3,5 @@ fun main(){
     var b: Int = 2
     var c: Int = a + b
     println(c)
-    println("hello world\n")
     return
 }

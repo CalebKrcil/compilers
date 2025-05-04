@@ -76,6 +76,7 @@ struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3)
   rv->src1 = a2;
   rv->src2 = a3;
   rv->next = NULL;
+  rv->is_double = 0;
 //   fprintf(stderr, "DEBUG: gen -> %s %s:%d, %s:%d, %s:%d\n",
 //     opcodename(op),
 //     regionname(a1.region), a1.u.offset,

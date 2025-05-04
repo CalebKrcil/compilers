@@ -38,6 +38,7 @@ typedef struct tac_list {
 struct instr {
    int opcode;
    struct addr dest, src1, src2;
+   int is_double;
    struct instr *next;
 };
 #define O_ADD   3001
