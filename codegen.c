@@ -1072,7 +1072,6 @@ static void asm_output_filename(const char *in, char *out, size_t sz) {
 
 void write_asm_file(const char *input_filename, struct instr *code) {
     char outfn[256];
-    int is_double_slot[256] = {0};
     asm_output_filename(input_filename, outfn, sizeof outfn);
     FILE *f = fopen(outfn, "w");
     if (!f) { perror(outfn); return; }
@@ -1105,7 +1104,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
-    int argc = 0, args_off[6], args_is_ptr[6] = {0};
+    int argc = 0, args_off[6], args_is_ptr[6] = {0}, args_is_double[6] = {0};
 
     // track when we’re inside a function and its stack frame size
     int inFunction = 0;
@@ -1197,6 +1196,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 if (argc < 6) {
                     args_off[argc] = cur->src1.u.offset;
                     args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
+                    args_is_double[argc] = cur->is_double;
                     argc++;
                 }
                 break;
@@ -1207,16 +1207,16 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         && strcmp(cur->src1.u.name, "println") == 0
                         && argc == 1) {
                         if (args_is_ptr[0]) {
-                            /* string path (unchanged) */
+                            // println(string)
                             fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", args_off[0]);
                         }
-                        else if (is_double_slot[ args_off[0] ]) {
-                            /* DOUBLE path */
+                        else if (args_is_double[0]) {
+                            // println(double)
                             fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
                             fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
                         }
                         else {
-                            /* INTEGER path */
+                            // println(int)
                             fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
                             fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
                         }
@@ -1283,7 +1283,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         "\tmovsd\t%%xmm0, %d(%%rbp)\n",
                         -cur->src1.u.offset,
                         -cur->dest.u.offset);
-                    is_double_slot[cur->dest.u.offset] = 1;
                 } else {
                     // existing 32-bit integer assignment path:
                     if (cur->src1.region == R_IMMED) {
@@ -1304,7 +1303,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                             -cur->src1.u.offset,
                             -cur->dest.u.offset);
                     }
-                    is_double_slot[cur->dest.u.offset] = 0;
                 }
                 break;
 
@@ -1322,7 +1320,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     "\tmovsd\t%%xmm0, %d(%%rbp)\n",
                     cur->src1.u.offset,
                 -cur->dest.u.offset);
-                is_double_slot[cur->dest.u.offset] = 1;
                 break;
 
           case O_SCONT:
@@ -1341,7 +1338,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
             case O_ISUB:
@@ -1352,7 +1348,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 -cur->src1.u.offset,
                 -cur->src2.u.offset,
                 -cur->dest.u.offset);
-                is_double_slot[cur->dest.u.offset] = 0;
                 break;
 
           case O_IMUL:
@@ -1363,7 +1358,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_IDIV:
@@ -1375,7 +1369,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_IMOD:
@@ -1387,7 +1380,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_DADD:
@@ -1398,7 +1390,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-            is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DSUB:
@@ -1409,7 +1400,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DMUL:
@@ -1420,7 +1410,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DDIV:
@@ -1431,7 +1420,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
-               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DMOD:
