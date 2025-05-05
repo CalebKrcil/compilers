@@ -182,10 +182,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     t->code  = NULL;
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
 
-    if (!t->leaf && t->nkids == 1 && t->kids[0] && t->kids[0]->leaf) {
+    // collapse any single-child node, propagating type too
+    if (!t->leaf && t->nkids == 1) {
         generate_code(t->kids[0]);
         t->place = t->kids[0]->place;
         t->code  = t->kids[0]->code;
+        t->type  = t->kids[0]->type;    // <<< propagate the child’s type
         return;
     }
 
@@ -213,6 +215,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case RealLiteral: {
+                t->type = double_typeptr;
                 // 1) record the literal in dbltab
                 char lbl[32];
                 snprintf(lbl, sizeof(lbl), "D%d", dblcount);
@@ -278,6 +281,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
                 if (e) {
                     t->place = e->location;
+                    t->type  = e->type;
                     debug_print("ID '%s' -> %s:%d\n",
                                 t->leaf->text,
                                 regionname(t->place.region),
@@ -331,6 +335,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             
             t->place = lhs->place;
+            t->type  = rhs->type;
             /* emit an ASN and tag it if this is a double assignment */
             {
                 struct instr *asn = gen(O_ASN,
@@ -349,17 +354,18 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        else if (strcmp(t->symbolname, "additive_expression") == 0 && t->nkids == 2) {
+        else if (strcmp(t->symbolname, "additive_expression")==0 && t->nkids==2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
-
-            int opcode;
-            if (t->type == double_typeptr) {
-                opcode = (t->prodrule == ADD ? O_DADD : O_DSUB);
-            } else {
-                opcode = (t->prodrule == ADD ? O_IADD : O_ISUB);
-            }
-
+            /* infer result type from kids */
+            int isD = (t->kids[0]->type==double_typeptr
+                     || t->kids[1]->type==double_typeptr);
+            t->type = isD ? double_typeptr : integer_typeptr;
+        
+            int opcode = isD
+                       ? (t->prodrule==ADD ? O_DADD : O_DSUB)
+                       : (t->prodrule==ADD ? O_IADD : O_ISUB);
+        
             t->place = new_temp();
             t->code  = concat(
                           concat(t->kids[0]->code, t->kids[1]->code),
@@ -375,30 +381,34 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
         /*multiplicative_expression*/
         else if (strcmp(t->symbolname, "multiplicative_expression") == 0
-                && t->nkids == 2) {
-            // 1) generate code for subexpressions
+            && t->nkids == 2) {
+            // 1) generate code for left and right subexpressions
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
 
-            // 2) pick the right opcode based on the expression’s type
+            // 2) infer result type: double if either operand is double
+            int isD = (t->kids[0]->type == double_typeptr
+                    || t->kids[1]->type == double_typeptr);
+            t->type  = isD ? double_typeptr : integer_typeptr;
+
+            // 3) pick the right opcode
             int opcode;
-            if (t->type == double_typeptr) {
-                // Double * or /
+            if (isD) {
+                // Double * or / (or modulo, if you implement it)
                 if      (t->prodrule == MULT) opcode = O_DMUL;
                 else if (t->prodrule == DIV ) opcode = O_DDIV;
-                else                           opcode = O_DMOD;   // or handle via fmod
+                else                          opcode = O_DMOD;
             } else {
-                // Int * or /
+                // Int * or / or %
                 if      (t->prodrule == MULT) opcode = O_IMUL;
                 else if (t->prodrule == DIV ) opcode = O_IDIV;
-                else                           opcode = O_IMOD;
+                else                          opcode = O_IMOD;
             }
 
-            // 3) allocate a result temp
+            // 4) allocate a result temp
             t->place = new_temp();
 
-            // 4) chain the three‐address instructions:
-            //    [ left code ] ; [ right code ] ; OPCODE result, left, right
+            // 5) chain the instructions: [ left code ] ; [ right code ] ; OPCODE result, left, right
             t->code = concat(
                 concat(t->kids[0]->code, t->kids[1]->code),
                 gen(opcode,
@@ -902,6 +912,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->code = concat(t->code, asn);
 
             t->place = id->place;
+            t->type  = init->type;
             return;
         }
         /*for statement*/
@@ -1061,6 +1072,7 @@ static void asm_output_filename(const char *in, char *out, size_t sz) {
 
 void write_asm_file(const char *input_filename, struct instr *code) {
     char outfn[256];
+    int is_double_slot[256] = {0};
     asm_output_filename(input_filename, outfn, sizeof outfn);
     FILE *f = fopen(outfn, "w");
     if (!f) { perror(outfn); return; }
@@ -1093,7 +1105,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
-    int argc = 0, args_off[6], args_is_ptr[6], args_is_double[6] = {0};
+    int argc = 0, args_off[6], args_is_ptr[6] = {0};
 
     // track when we’re inside a function and its stack frame size
     int inFunction = 0;
@@ -1185,84 +1197,68 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 if (argc < 6) {
                     args_off[argc] = cur->src1.u.offset;
                     args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
-                    args_is_double[argc] = cur->is_double;
                     argc++;
                 }
                 break;
 
-            case O_CALL: {
-                if (cur->src1.region == R_NAME
-                    && strcmp(cur->src1.u.name, "println") == 0
-                    && argc == 1) 
-                   {
-                       // true if the single argument was a string literal
-                       int args_is_string_literal = args_is_ptr[0];
-                       // the strtab index of that literal (matches your .LC0, .LC1, … labels)
-                       int literal_id             = args_off[0];
-               
-                        if (args_is_string_literal) {
-                           // load address of ".LC<literal_id>"
-                           fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", literal_id);
-                        } else if (args_is_double[0]) {
-                            // double version:
+                case O_CALL: {
+                    /* special-case for println(x) */
+                    if (cur->src1.region == R_NAME
+                        && strcmp(cur->src1.u.name, "println") == 0
+                        && argc == 1) {
+                        if (args_is_ptr[0]) {
+                            /* string path (unchanged) */
+                            fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", args_off[0]);
+                        }
+                        else if (is_double_slot[ args_off[0] ]) {
+                            /* DOUBLE path */
                             fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
                             fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
-                            fprintf(f, "\txor\t%%eax, %%eax\n");
-                            fprintf(f, "\tcall\tprintf\n");
-                        } else {
-                           // integer case: load address of a "%d\n" format string
-                           fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
-                           // then move the integer into %esi
-                           fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
                         }
-               
-                       // clear AL for printf varargs ABI
-                       fprintf(f, "\txor\t%%eax, %%eax\n");
-                       // call C’s printf
-                       fprintf(f, "\tcall\tprintf\n");
-               
-                       // done with this call
-                       argc = 0;
-                       break;
-                   }
-                /* first—if it’s exactly one pure-int arg, just movl to %edi */
-                if (argc == 1 && !args_is_ptr[0]) {
-                    fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n", args_off[0]);
-                }
-                /* otherwise handle up to six args, picking the right sequence: */
-                else {
-                    for (int i = 0; i < argc && i < 6; i++) {
-                        if (args_is_ptr[i]) {
-                            /* string literal (or other global) → load its label */
-                            fprintf(f,
-                                    "\tleaq\t.LC%d(%%rip), %s\n",
-                                    args_off[i],
-                                    qreg[i]);
-                        } else {
-                            /* ordinary integer local → movl from stack */
-                            fprintf(f,
-                                    "\tmovl\t-%d(%%rbp), %s\n",
-                                    args_off[i],
-                                    ireg[i]);
+                        else {
+                            /* INTEGER path */
+                            fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
+                            fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
+                        }
+                        fprintf(f, "\txor\t%%eax, %%eax\n");
+                        fprintf(f, "\tcall\tprintf\n");
+                        argc = 0;
+                        break;
+                    }
+                
+                    /* otherwise, fall back to your existing up-to-six-arg logic */
+                    if (argc == 1 && !args_is_ptr[0]) {
+                        fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n", args_off[0]);
+                    } else {
+                        for (int i = 0; i < argc && i < 6; i++) {
+                            if (args_is_ptr[i]) {
+                                fprintf(f,
+                                        "\tleaq\t.LC%d(%%rip), %s\n",
+                                        args_off[i],
+                                        qreg[i]);
+                            } else {
+                                fprintf(f,
+                                        "\tmovl\t-%d(%%rbp), %s\n",
+                                        args_off[i],
+                                        ireg[i]);
+                            }
                         }
                     }
-                }
-
-                /* now actually call */
-                if (cur->src1.region == R_NAME) {
-                    fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
-                } else {
-                    fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
-                }
-
-                /* and store the return value, if any */
-                if (cur->dest.u.offset > 0) {
-                    fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
-                            cur->dest.u.offset);
-                }
-                argc = 0;
-                break;
-            }               
+                
+                    if (cur->src1.region == R_NAME) {
+                        fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
+                    } else {
+                        fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
+                    }
+                
+                    /* store return value */
+                    if (cur->dest.u.offset > 0) {
+                        fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
+                                cur->dest.u.offset);
+                    }
+                    argc = 0;
+                    break;
+                }               
 
             case O_RET:
                 // load return value into %eax if present
@@ -1287,6 +1283,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         "\tmovsd\t%%xmm0, %d(%%rbp)\n",
                         -cur->src1.u.offset,
                         -cur->dest.u.offset);
+                    is_double_slot[cur->dest.u.offset] = 1;
                 } else {
                     // existing 32-bit integer assignment path:
                     if (cur->src1.region == R_IMMED) {
@@ -1307,6 +1304,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                             -cur->src1.u.offset,
                             -cur->dest.u.offset);
                     }
+                    is_double_slot[cur->dest.u.offset] = 0;
                 }
                 break;
 
@@ -1324,6 +1322,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     "\tmovsd\t%%xmm0, %d(%%rbp)\n",
                     cur->src1.u.offset,
                 -cur->dest.u.offset);
+                is_double_slot[cur->dest.u.offset] = 1;
                 break;
 
           case O_SCONT:
@@ -1342,6 +1341,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
             case O_ISUB:
@@ -1352,6 +1352,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 -cur->src1.u.offset,
                 -cur->src2.u.offset,
                 -cur->dest.u.offset);
+                is_double_slot[cur->dest.u.offset] = 0;
                 break;
 
           case O_IMUL:
@@ -1362,6 +1363,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_IDIV:
@@ -1373,6 +1375,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_IMOD:
@@ -1384,6 +1387,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 0;
             break;
 
           case O_DADD:
@@ -1394,6 +1398,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+            is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DSUB:
@@ -1404,6 +1409,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DMUL:
@@ -1414,6 +1420,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DDIV:
@@ -1424,6 +1431,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->src1.u.offset,
                -cur->src2.u.offset,
                -cur->dest.u.offset);
+               is_double_slot[cur->dest.u.offset] = 1;
             break;
 
           case O_DMOD:

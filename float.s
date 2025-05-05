@@ -30,9 +30,9 @@ main:
 	movsd	%xmm0, -40(%rbp)
 	movl	-40(%rbp), %eax
 	movl	%eax, -16(%rbp)
-	movl	-8(%rbp), %eax
-	addl	-16(%rbp), %eax
-	movl	%eax, -48(%rbp)
+	movsd	-8(%rbp), %xmm0
+	addsd	-16(%rbp), %xmm0
+	movsd	%xmm0, -48(%rbp)
 	movl	-48(%rbp), %eax
 	movl	%eax, -24(%rbp)
 	leaq	.LCint_fmt(%rip), %rdi

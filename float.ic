@@ -10,7 +10,7 @@ LCONT     local:32          immed:0           none:0
 ASN       local:8           local:32          none:0          
 LCONT     local:40          immed:1           none:0          
 ASN       local:16          local:40          none:0          
-IADD      local:48          local:8           local:16        
+DADD      local:48          local:8           local:16        
 ASN       local:24          local:48          none:0          
 PARM      none:0            local:24          none:0          
 CALL      none:0            println           none:0          
