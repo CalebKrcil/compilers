@@ -69,5 +69,8 @@ void print_graph2(struct tree *t, FILE *f);
 char *pretty_print_name(struct tree *t);
 char *escape(char *s);
 void flattenParameterList(struct tree *node, struct tree ***params, int *count);
+void print_graph_TAC(struct tree *t, char *filename);
+void print_graph2_TAC(struct tree *t, FILE *f);
+void format_instruction(char *buf, size_t bufsize, struct instr *i);
 
 #endif
