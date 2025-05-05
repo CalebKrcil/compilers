@@ -397,11 +397,23 @@ char *pretty_print_name(struct tree *t) {
  
 void print_branch(struct tree *t, FILE *f) {
     if (!t) return;
-    
+
     char *name = pretty_print_name(t);
-    fprintf(f, "N%d [shape=box label=\"%s\"];\n", t->id, name);
+
+    fprintf(f, "N%d [shape=box label=\"%s\\n", t->id, name);
+
+    if (t->type) {
+        const char *type_str = typename(t->type);
+        fprintf(f, "type = %s\\l", type_str);
+    }
+
+    fprintf(f, "mutable = %s\\l", t->is_mutable ? "true" : "false");
+    fprintf(f, "nullable = %s\\l\"];\n", t->is_nullable ? "true" : "false");
+
     free(name);
 }
+
+
   
 void print_leaf(struct tree *t, FILE *f) {
     if (!t || !t->leaf) return;
@@ -447,6 +459,88 @@ void print_graph(struct tree *t, char *filename) {
     
     fprintf(f, "digraph {\n");
     print_graph2(t, f);
+    fprintf(f, "}\n");
+    fclose(f);
+}
+
+char *format_place(struct addr a) {
+    char *buf = malloc(64);
+    if (!buf) exit(1);
+    if (a.region == R_LABEL)
+        snprintf(buf, 64, "L%d", a.u.offset);
+    else
+        snprintf(buf, 64, "%s[%d]", regionname(a.region), a.u.offset);
+    return buf;
+}
+
+void format_instruction(char *buf, size_t bufsize, struct instr *i) {
+    snprintf(buf, bufsize, "%s %s:%d %s:%d %s:%d",
+        opcodename(i->opcode),
+        regionname(i->dest.region), i->dest.u.offset,
+        regionname(i->src1.region), i->src1.u.offset,
+        regionname(i->src2.region), i->src2.u.offset);
+}
+
+
+
+void print_graph2_TAC(struct tree *t, FILE *f) {
+    if (!t) return;
+    if (t->leaf) {
+        print_leaf(t, f);
+    } else {
+        print_branch(t, f);
+    }
+
+    for (int i = 0; i < t->nkids; i++) {
+        if (t->kids[i]) {
+            fprintf(f, "N%d -> N%d;\n", t->id, t->kids[i]->id);
+            print_graph2_TAC(t->kids[i], f);
+        } else {
+            int temp_id = serial++;
+            fprintf(f, "N%d -> N%d;\n", t->id, temp_id);
+            fprintf(f, "N%d [label=\"Empty rule\"];\n", temp_id);
+        }
+    }
+
+    if (t->code) {
+        struct instr *curr = t->code;
+        int prev_id = -1;
+        while (curr) {
+            int instr_id = serial++;
+            char instr_str[256];
+            format_instruction(instr_str, sizeof(instr_str), curr);
+
+            fprintf(f,
+                "N%d [shape=ellipse style=dashed color=gray label=\"%s\"];\n",
+                instr_id, instr_str);
+
+            if (prev_id == -1) {
+                fprintf(f, "N%d -> N%d [style=dashed color=gray];\n", t->id, instr_id);
+            } else {
+                fprintf(f, "N%d -> N%d [style=dashed color=gray];\n", prev_id, instr_id);
+            }
+
+            prev_id = instr_id;
+            curr = curr->next;
+        }
+    }
+}
+
+
+void print_graph_TAC(struct tree *t, char *filename) {
+    if (!t) {
+        fprintf(stderr, "Error: Cannot generate TAC DOT file for NULL tree\n");
+        return;
+    }
+
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        fprintf(stderr, "Error: Cannot open file %s for writing\n", filename);
+        return;
+    }
+
+    fprintf(f, "digraph {\n");
+    print_graph2_TAC(t, f);
     fprintf(f, "}\n");
     fclose(f);
 }
