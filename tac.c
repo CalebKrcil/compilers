@@ -88,7 +88,11 @@ struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3)
 struct instr *copylist(struct instr *l)
 {
    if (l == NULL) return NULL;
+   // gen() zeroes out is_double by default
    struct instr *lcopy = gen(l->opcode, l->dest, l->src1, l->src2);
+   // *carry over* the double-width flag
+   lcopy->is_double = l->is_double;
+   // copy the rest of the chain
    lcopy->next = copylist(l->next);
    return lcopy;
 }

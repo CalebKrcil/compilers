@@ -5,7 +5,7 @@
 .code
 loc       main              none:0            none:0          
 lab       label:0           main              none:0          
-ALLOC     none:0            immed:32          none:0          
+ALLOC     none:0            immed:64          none:0          
 LCONT     local:32          immed:0           none:0          
 ASN       local:8           local:32          none:0          
 LCONT     local:40          immed:1           none:0          

@@ -108,6 +108,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
  static void output_instruction(FILE *f, struct instr *instr) {
     if (!f || !instr) return;
+    debug_print("ASM EMIT  %s   is_double=%d   dest=%s:%d   src1=%s:%d\n",
+        opcodename(instr->opcode),
+        instr->is_double,
+        regionname(instr->dest.region), instr->dest.u.offset,
+        regionname(instr->src1.region), instr->src1.u.offset);
 
     char destbuf[32], src1buf[32], src2buf[32];
 
@@ -203,11 +208,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         // printf("Category: %d\n", t->leaf->category);
         switch (t->leaf->category) {
             case IntegerLiteral: {
-                // printf("int literal\n");
+                // mark this node as an integer
+                t->type  = integer_typeptr;
                 t->place = new_temp();
                 struct addr imm = { .region = R_IMMED,
                                     .u.offset = t->leaf->value.ival };
-                t->code = gen(O_ASN, t->place, imm, NULL_ADDR);
+                t->code  = gen(O_ASN, t->place, imm, NULL_ADDR);
                 debug_print("LIT int %d -> %s:%d\n",
                             t->leaf->value.ival,
                             regionname(t->place.region),
@@ -215,32 +221,41 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case RealLiteral: {
+                // Real literals are always 8‐byte doubles
                 t->type = double_typeptr;
-                // 1) record the literal in dbltab
+            
+                // 1) give it a label .D<id> and record it
                 char lbl[32];
                 snprintf(lbl, sizeof(lbl), "D%d", dblcount);
                 int id = add_real_literal(lbl, t->leaf->value.dval);
-    
-                // 2) allocate a temp (stack slot) for this double
+            
+                // 2) allocate an 8‐byte temp slot
                 t->place = new_temp();
-    
-                // 3) emit O_LCONT so write_asm_file does:
-                //      movsd .D<id>(%rip), %xmm0
-                //      movsd %xmm0, -<t->place>(%rbp)
-                t->code = gen(
+            
+                // 3) load the constant into xmm0 then store it into the temp
+                struct instr *lit = gen(
                     O_LCONT,
                     t->place,
                     (struct addr){ .region = R_IMMED, .u.offset = id },
                     NULL_ADDR
                 );
-    
-                debug_print("LIT real %f → .D%d @ %s:%d\n",
-                            t->leaf->value.dval,
-                            id,
-                            regionname(t->place.region),
-                            t->place.u.offset);
+                // mark this load as a double so downstream stores use movsd
+                lit->is_double = 1;
+                debug_print("CODEGEN RealLiteral: place=%s:%d  is_double=%d\n",
+                    regionname(t->place.region), t->place.u.offset,
+                    lit->is_double);
+            
+                t->code = lit;
+                debug_print(
+                  "LIT real %f → .D%d @ %s:%d\n",
+                   t->leaf->value.dval,
+                   id,
+                   regionname(t->place.region),
+                   t->place.u.offset
+                );
                 return;
             }
+            
 
             case StringLiteral: {
                 static int stringLabelCounter = 0;
@@ -337,20 +352,26 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->place = lhs->place;
             t->type  = rhs->type;
             /* emit an ASN and tag it if this is a double assignment */
-            {
-                struct instr *asn = gen(O_ASN,
-                                       lhs->place,
-                                       rhs->place,
-                                       NULL_ADDR);
-                /* you need to have #include "type.h" so double_typeptr is in scope */
-                asn->is_double = (rhs->type == double_typeptr);
-                t->code = concat(rhs->code, asn);
-            }
-    
+            struct instr *asn = gen(O_ASN,
+                            lhs->place,
+                            rhs->place,
+                            NULL_ADDR);
+            SymbolTableEntry entry =
+            lookup_symbol(currentFunctionSymtab,
+                            lhs->leaf->text);
+            // force 8‐byte store if the variable is declared Double
+            asn->is_double = (entry && entry->type == double_typeptr) ? 1 : 0;
+            debug_print("CODEGEN ASN to '%s': dest=%s:%d  src=%s:%d  is_double=%d\n",
+                lhs->leaf->text,
+                regionname(asn->dest.region), asn->dest.u.offset,
+                regionname(asn->src1.region), asn->src1.u.offset,
+                asn->is_double);
+            t->code = concat(rhs->code, asn);
+
             debug_print("DEBUG: Generated assignment: %s:%d = %s:%d (is_double=%d)\n",
-                        regionname(lhs->place.region), lhs->place.u.offset,
-                        regionname(rhs->place.region), rhs->place.u.offset,
-                        (int)(rhs->type == double_typeptr));
+                regionname(lhs->place.region), lhs->place.u.offset,
+                regionname(rhs->place.region), rhs->place.u.offset,
+                (int)asn->is_double);
             return;
         }
 
@@ -761,64 +782,55 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->code = code;
             return;
         }
-        
-        
 
         /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
             // 0) save old function scope
             SymbolTable oldSymtab = currentFunctionSymtab;
-
+        
             // 1) get name and fresh label
             char *funcName = t->kids[0]->leaf->text;
             struct addr label_addr = *genlabel();
-
+        
             // 2) update the global symbol table entry
             SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
             if (fentry) fentry->location = label_addr;
-
-            // 3) start emitting: .globl and .type/@function
+        
+            // 3) emit .globl/.type/@function
             struct addr name_addr = { .region = R_NAME, .u.name = strdup(funcName) };
             t->code = gen(D_GLOB,  name_addr, NULL_ADDR, NULL_ADDR);
             t->code = concat(t->code,
-                gen(D_PROC,
-                    label_addr,
-                    name_addr,
-                    NULL_ADDR));
-
+                             gen(D_PROC, label_addr, name_addr, NULL_ADDR));
+        
             // 4) switch into this function’s symbol table
-            //    (t->scope was set by printsyms when we built the AST)
             if (t->scope) currentFunctionSymtab = t->scope;
-
-            // 5) emit frame allocation
-            t->code = concat(t->code,
-                gen(O_ALLOC,
-                    NULL_ADDR,
-                    (struct addr){ .region = R_IMMED,
-                                .u.offset = currentFunctionSymtab->nextOffset },
-                    NULL_ADDR));
-
-            // 6) copy incoming parameters from R_PARAM into their locals
+        
+            // 5) emit a placeholder O_ALLOC; we’ll patch its size below
+            struct instr *allocInstr = gen(
+                O_ALLOC,
+                NULL_ADDR,
+                (struct addr){ .region = R_IMMED,
+                               .u.offset = currentFunctionSymtab->nextOffset },
+                NULL_ADDR
+            );
+            t->code = concat(t->code, allocInstr);
+        
+            // 6) copy incoming parameters into their locals
             {
                 struct tree **params = NULL;
                 int paramCount = 0;
-                // flattenParameterList is in tree.c / tree.h
                 flattenParameterList(t->kids[1], &params, &paramCount);
                 for (int i = 0; i < paramCount; i++) {
-                    // each params[i]->kids[0] is the identifier node
                     char *pname = params[i]->kids[0]->leaf->text;
                     SymbolTableEntry pe = lookup_symbol(currentFunctionSymtab, pname);
                     if (!pe) continue;
                     struct addr preg = { .region = R_PARAM, .u.offset = i };
                     t->code = concat(t->code,
-                                    gen(O_ASN,
-                                        pe->location,
-                                        preg,
-                                        NULL_ADDR));
+                                     gen(O_ASN, pe->location, preg, NULL_ADDR));
                 }
                 free(params);
             }
-
+        
             // 7) generate the function body
             struct tree *body = NULL;
             for (int i = 0; i < t->nkids; i++) {
@@ -831,38 +843,52 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 generate_code(body);
                 t->code = concat(t->code, body->code);
             }
-
-            // 8) if we didn’t already end with a RET, append dealloc + RET
+        
+            // 8) scan the *built* code list for highest local offset
+            int maxOffset = currentFunctionSymtab->nextOffset;
+            for (struct instr *ip = t->code; ip; ip = ip->next) {
+                if (ip->dest.region == R_LOCAL && ip->dest.u.offset > maxOffset)
+                    maxOffset = ip->dest.u.offset;
+                if (ip->src1.region == R_LOCAL && ip->src1.u.offset > maxOffset)
+                    maxOffset = ip->src1.u.offset;
+                if (ip->src2.region == R_LOCAL && ip->src2.u.offset > maxOffset)
+                    maxOffset = ip->src2.u.offset;
+            }
+            // round up to 16 bytes
+            int frameSize = ((maxOffset + 15) / 16) * 16;
+        
+            // patch the *actual* O_ALLOC in our t->code
+            for (struct instr *ip = t->code; ip; ip = ip->next) {
+                if (ip->opcode == O_ALLOC) {
+                    ip->src1.u.offset = frameSize;
+                    break;
+                }
+            }
+        
+            // 9) if no explicit RET at end, append dealloc + RET using frameSize
             {
                 struct instr *last = t->code;
                 while (last && last->next) last = last->next;
                 if (!last || last->opcode != O_RET) {
                     t->code = concat(t->code,
-                        gen(O_DEALLOC,
-                            NULL_ADDR,
-                            (struct addr){ .region = R_IMMED,
-                                        .u.offset = currentFunctionSymtab->nextOffset },
-                            NULL_ADDR));
+                                     gen(O_DEALLOC,
+                                         NULL_ADDR,
+                                         (struct addr){ .region = R_IMMED,
+                                                        .u.offset = frameSize },
+                                         NULL_ADDR));
                     t->code = concat(t->code,
-                        gen(O_RET,
-                            NULL_ADDR,
-                            NULL_ADDR,
-                            NULL_ADDR));
+                                     gen(O_RET, NULL_ADDR, NULL_ADDR, NULL_ADDR));
                 }
             }
-
-            // 9) finish up: .LFE / .size
+        
+            // 10) finish up: .LFE / .size
             t->code = concat(t->code,
-                gen(D_END,
-                    label_addr,
-                    name_addr,
-                    NULL_ADDR));
-
-            // 10) restore old function scope and return
+                             gen(D_END, label_addr, name_addr, NULL_ADDR));
+        
+            // 11) restore old function scope
             currentFunctionSymtab = oldSymtab;
             return;
         }
-
         
         
     
@@ -897,24 +923,46 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                   strcmp(t->symbolname, "constVariableDeclaration") == 0)
                  && t->nkids >= 3)
         {
-            struct tree *id   = t->kids[0];
-            struct tree *init = t->kids[2];
-
-            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, id->leaf->text);
-            id->place = entry->location;
-
-            generate_code(init);
-            t->code = init->code;
-
-            // emit ASN and tag it if init is a double
-            struct instr *asn = gen(O_ASN, id->place, init->place, NULL_ADDR);
-            asn->is_double = (init->type == double_typeptr);
-            t->code = concat(t->code, asn);
-
-            t->place = id->place;
-            t->type  = init->type;
-            return;
-        }
+                // var <name> : <type> = <initializer>
+                struct tree *idNode   = t->kids[0];
+                // struct tree *typeNode = t->kids[1];
+                struct tree *init     = t->kids[2];
+            
+                // look up the stack slot
+                SymbolTableEntry entry =
+                  lookup_symbol(currentFunctionSymtab, idNode->leaf->text);
+                if (!entry) {
+                    fprintf(stderr,
+                      "ERROR: variableDeclaration \"%s\" not found\n",
+                      idNode->leaf->text);
+                    exit(1);
+                }
+                struct addr var_loc = entry->location;
+            
+                // codegen the initializer
+                generate_code(init);
+            
+                // emit the store (8-byte if a double)
+                struct instr *asn = gen(
+                    O_ASN,
+                    entry->location,  // dest = declared slot
+                    init->place,      // src  = initializer result
+                    NULL_ADDR
+                );
+                // tag by the declared type in the symbol table
+                asn->is_double = (entry->type == double_typeptr) ? 1 : 0;
+                debug_print("CODEGEN varDecl '%s': dest=%s:%d  init_place=%s:%d  is_double=%d\n",
+                    idNode->leaf->text,
+                    regionname(asn->dest.region), asn->dest.u.offset,
+                    regionname(init->place.region), init->place.u.offset,
+                    asn->is_double);
+            
+                // chain and return
+                t->code  = concat(init->code, asn);
+                t->place = var_loc;
+                t->type  = init->type;
+                return;
+            }       
         /*for statement*/
         else if (strcmp(t->symbolname, "forStatementKotlinRange") == 0 && t->nkids == 4) {
             struct tree *loopVar = t->kids[0];     
@@ -1209,18 +1257,22 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         if (args_is_ptr[0]) {
                             // println(string)
                             fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", args_off[0]);
+                            fprintf(f, "\txor\t%%eax, %%eax\n");      // no XMM regs used
                         }
                         else if (args_is_double[0]) {
                             // println(double)
                             fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
                             fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
+                            // FULLY zero and then set EAX=1 so printf knows 1 XMM arg
+                            fprintf(f, "\tmovl\t$1, %%eax\n");
                         }
                         else {
                             // println(int)
                             fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
                             fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
+                            // ZERO EAX for no XMM args
+                            fprintf(f, "\txor\t%%eax, %%eax\n");
                         }
-                        fprintf(f, "\txor\t%%eax, %%eax\n");
                         fprintf(f, "\tcall\tprintf\n");
                         argc = 0;
                         break;
