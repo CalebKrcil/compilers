@@ -310,6 +310,29 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         }
     }
 
+    if (t->symbolname && strcmp(t->symbolname, "postIncrement") == 0 && t->nkids == 1) {
+        struct tree *varNode = t->kids[0];
+        // Type check: must be integer or double
+        if (!check_type_compatibility(varNode->type, integer_typeptr) &&
+            !check_type_compatibility(varNode->type, double_typeptr)) {
+            report_semantic_error("Invalid operand type for '++'", t->lineno);
+        }
+        // The result type is the same as the operand
+        t->type = varNode->type;
+        return;
+    }
+
+    else if (t->symbolname && strcmp(t->symbolname, "postDecrement") == 0 && t->nkids == 1) {
+        struct tree *varNode = t->kids[0];
+        /* Operand must be Int or Double */
+        if (varNode->type != integer_typeptr && varNode->type != double_typeptr) {
+            report_semantic_error("Operand of -- must be Int or Double", t->lineno);
+        }
+        /* Result type is same as operand */
+        t->type = varNode->type;
+        return;
+    }
+
     if (t->symbolname && strcmp(t->symbolname, "comparison") == 0 && t->nkids >= 2) {
         typeptr left = t->kids[0]->type;
         typeptr right = t->kids[1]->type;
@@ -329,7 +352,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         t->type = boolean_typeptr;
     }
 
-    else if (t->symbolname && strcmp(t->symbolname, "equality") == 0 && t->nkids == 2) {
+    if (t->symbolname && strcmp(t->symbolname, "equality") == 0 && t->nkids == 2) {
         //typeptr left  = t->kids[0]->type;
         //typeptr right = t->kids[1]->type;
         t->type = boolean_typeptr;

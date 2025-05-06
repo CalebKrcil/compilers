@@ -187,6 +187,39 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     t->code  = NULL;
     t->place = (struct addr){ R_NONE, { .offset = 0 } };
 
+    if (t->symbolname && strcmp(t->symbolname, "postIncrement") == 0 && t->nkids == 1) {
+        struct tree *varNode = t->kids[0];
+        /* generate code for the variable access */
+        generate_code(varNode);
+        /* save the original value into a temp (postfix result) */
+        struct addr oldval = new_temp();
+        struct instr *code = gen(O_ASN, oldval, varNode->place, NULL_ADDR);
+        /* prepare constant 1 */
+        struct addr one = { .region = R_IMMED, .u.offset = 1 };
+        /* increment variable in place */
+        code = concat(code, gen(O_IADD, varNode->place, varNode->place, one));
+        /* stitch together and set result */
+        t->code  = concat(varNode->code, code);
+        t->place = oldval;
+        return;
+    }
+    
+    if (t->symbolname && strcmp(t->symbolname, "postDecrement") == 0 && t->nkids == 1) {
+        struct tree *varNode = t->kids[0];
+        /* generate code for LHS */
+        generate_code(varNode);
+        /* save old value in temp */
+        struct addr oldval = new_temp();
+        struct instr *code = gen(O_ASN, oldval, varNode->place, NULL_ADDR);
+        /* decrement LHS */
+        struct addr one = { .region = R_IMMED, .u.offset = 1 };
+        code = concat(code, gen(O_ISUB, varNode->place, varNode->place, one));
+        /* finalize */
+        t->code = concat(varNode->code, code);
+        t->place = oldval;
+        return;
+    }
+
     // collapse any single-child node, propagating type too
     if (!t->leaf && t->nkids == 1) {
         generate_code(t->kids[0]);
@@ -1450,25 +1483,54 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 cur->dest.u.offset);
             break;
 
-          case O_IADD:
-            fprintf(f,
-                "\tmovl\t%d(%%rbp), %%eax\n"
-                "\taddl\t%d(%%rbp), %%eax\n"
-                "\tmovl\t%%eax, %d(%%rbp)\n",
-               -cur->src1.u.offset,
-               -cur->src2.u.offset,
-               -cur->dest.u.offset);
+            case O_IADD:
+            if (cur->src2.region == R_IMMED) {
+                // add a constant
+                fprintf(f,
+                    "\tmovl\t%d(%%rbp), %%eax\n"
+                    "\taddl\t$%d, %%eax\n"
+                    "\tmovl\t%%eax, %d(%%rbp)\n",
+                    -cur->src1.u.offset,    // load lhs
+                     cur->src2.u.offset,    // immediate constant
+                    -cur->dest.u.offset     // store result
+                );
+            } else {
+                // add two stack slots
+                fprintf(f,
+                    "\tmovl\t%d(%%rbp), %%eax\n"
+                    "\taddl\t%d(%%rbp), %%eax\n"
+                    "\tmovl\t%%eax, %d(%%rbp)\n",
+                    -cur->src1.u.offset,
+                    -cur->src2.u.offset,
+                    -cur->dest.u.offset
+                );
+            }
             break;
-
-            case O_ISUB:
+        
+        case O_ISUB:
+            if (cur->src2.region == R_IMMED) {
+                // subtract a constant
+                fprintf(f,
+                    "\tmovl\t%d(%%rbp), %%eax\n"
+                    "\tsubl\t$%d, %%eax\n"
+                    "\tmovl\t%%eax, %d(%%rbp)\n",
+                    -cur->src1.u.offset,    // load lhs
+                     cur->src2.u.offset,    // immediate constant
+                    -cur->dest.u.offset     // store result
+                );
+            } else {
+                // subtract two stack slots
                 fprintf(f,
                     "\tmovl\t%d(%%rbp), %%eax\n"
                     "\tsubl\t%d(%%rbp), %%eax\n"
                     "\tmovl\t%%eax, %d(%%rbp)\n",
-                -cur->src1.u.offset,
-                -cur->src2.u.offset,
-                -cur->dest.u.offset);
-                break;
+                    -cur->src1.u.offset,
+                    -cur->src2.u.offset,
+                    -cur->dest.u.offset
+                );
+            }
+            break;
+        
 
           case O_IMUL:
             fprintf(f,

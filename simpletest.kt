@@ -15,6 +15,12 @@ fun main() {
     println("meow\n")
     silly("meow\n")
     var d: Int = multiple_args(1, 2)
+    println(d)
+    d++
+    println(d)
+    d--
+    d--
+    println(d)
     println(multiple_args(a, b))
     return;
 }
