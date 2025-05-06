@@ -77,6 +77,7 @@ struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3)
   rv->src2 = a3;
   rv->next = NULL;
   rv->is_double = 0;
+  rv->is_ptr = 0;
 //   fprintf(stderr, "DEBUG: gen -> %s %s:%d, %s:%d, %s:%d\n",
 //     opcodename(op),
 //     regionname(a1.region), a1.u.offset,
@@ -92,6 +93,7 @@ struct instr *copylist(struct instr *l)
    struct instr *lcopy = gen(l->opcode, l->dest, l->src1, l->src2);
    // *carry over* the double-width flag
    lcopy->is_double = l->is_double;
+    lcopy->is_ptr = l->is_ptr;
    // copy the rest of the chain
    lcopy->next = copylist(l->next);
    return lcopy;

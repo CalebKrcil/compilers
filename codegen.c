@@ -272,6 +272,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 snprintf(label, sizeof(label), "S%d", stringLabelCounter);
                 t->place.region = R_GLOBAL;
                 t->place.u.offset = stringLabelCounter;
+                t->type = string_typeptr;
                 add_string_literal(label, t->leaf->text);
                 stringLabelCounter++;
                 return;
@@ -361,6 +362,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                             lhs->leaf->text);
             // force 8‐byte store if the variable is declared Double
             asn->is_double = (entry && entry->type == double_typeptr) ? 1 : 0;
+            asn->is_ptr = (entry && entry->type == string_typeptr) ? 1 : 0;
             debug_print("CODEGEN ASN to '%s': dest=%s:%d  src=%s:%d  is_double=%d\n",
                 lhs->leaf->text,
                 regionname(asn->dest.region), asn->dest.u.offset,
@@ -746,6 +748,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 // build the PARM and tag it if the tree node was double-typed
                 struct instr *p = gen(O_PARM, NULL_ADDR, args[i]->place, NULL_ADDR);
                 p->is_double = (args[i]->type == double_typeptr);
+                p->is_ptr    = (args[i]->type == string_typeptr);
                 code = concat(code, p);
             }
             free(args);
@@ -761,22 +764,17 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
               && fentry->type
               && fentry->type->u.f.returntype != null_typeptr;
         
-            if (returnsValue) {
-              // allocate exactly one temp for the return slot
-              t->place = new_temp();
-              code = concat(code,
-                            gen(O_CALL,
-                                t->place,
-                                nameAddr,
-                                NULL_ADDR));
+              if (returnsValue) {
+                t->place = new_temp();
+                struct instr *callInstr = gen(O_CALL, t->place, nameAddr, NULL_ADDR);
+                // tag the call as returning a double if so
+                callInstr->is_double =
+                    (fentry->type->u.f.returntype == double_typeptr);
+                code = concat(code, callInstr);
             } else {
-              // void/Unit function: no return slot
-              t->place = (struct addr){ R_NONE, { .offset = 0 } };
-              code = concat(code,
-                            gen(O_CALL,
-                                NULL_ADDR,
-                                nameAddr,
-                                NULL_ADDR));
+                t->place = (struct addr){ R_NONE, { .offset = 0 } };
+                code = concat(code,
+                              gen(O_CALL, NULL_ADDR, nameAddr, NULL_ADDR));
             }
         
             t->code = code;
@@ -825,8 +823,10 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                     SymbolTableEntry pe = lookup_symbol(currentFunctionSymtab, pname);
                     if (!pe) continue;
                     struct addr preg = { .region = R_PARAM, .u.offset = i };
-                    t->code = concat(t->code,
-                                     gen(O_ASN, pe->location, preg, NULL_ADDR));
+                    struct instr *parmCopy = gen(O_ASN, pe->location, preg, NULL_ADDR);
+                    parmCopy->is_double = (pe->type == double_typeptr);
+                    parmCopy->is_ptr    = (pe->type == string_typeptr);
+                    t->code = concat(t->code, parmCopy);
                 }
                 free(params);
             }
@@ -951,6 +951,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 );
                 // tag by the declared type in the symbol table
                 asn->is_double = (entry->type == double_typeptr) ? 1 : 0;
+                asn->is_ptr = (entry->type == string_typeptr) ? 1 : 0;
                 debug_print("CODEGEN varDecl '%s': dest=%s:%d  init_place=%s:%d  is_double=%d\n",
                     idNode->leaf->text,
                     regionname(asn->dest.region), asn->dest.u.offset,
@@ -1152,7 +1153,9 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
+    const char *xmmreg[6] = {"%xmm0","%xmm1","%xmm2","%xmm3","%xmm4","%xmm5"};
     int argc = 0, args_off[6], args_is_ptr[6] = {0}, args_is_double[6] = {0};
+    int args_region[6];
 
     // track when we’re inside a function and its stack frame size
     int inFunction = 0;
@@ -1245,6 +1248,8 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     args_off[argc] = cur->src1.u.offset;
                     args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
                     args_is_double[argc] = cur->is_double;
+                    args_is_ptr[argc]    = cur->is_ptr;
+                    args_region[argc]    = cur->src1.region;
                     argc++;
                 }
                 break;
@@ -1256,8 +1261,16 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         && argc == 1) {
                         if (args_is_ptr[0]) {
                             // println(string)
-                            fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n", args_off[0]);
-                            fprintf(f, "\txor\t%%eax, %%eax\n");      // no XMM regs used
+                            if (args_region[0] == R_GLOBAL) {
+                                // a literal
+                                fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n",
+                                        args_off[0]);
+                            } else {
+                                // a local/param variable
+                                fprintf(f, "\tmovq\t-%d(%%rbp), %%rdi\n",
+                                        args_off[0]);
+                            }
+                            fprintf(f, "\txor\t%%eax, %%eax\n");
                         }
                         else if (args_is_double[0]) {
                             // println(double)
@@ -1279,34 +1292,43 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     }
                 
                     /* otherwise, fall back to your existing up-to-six-arg logic */
-                    if (argc == 1 && !args_is_ptr[0]) {
-                        fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n", args_off[0]);
-                    } else {
-                        for (int i = 0; i < argc && i < 6; i++) {
-                            if (args_is_ptr[i]) {
-                                fprintf(f,
-                                        "\tleaq\t.LC%d(%%rip), %s\n",
-                                        args_off[i],
-                                        qreg[i]);
-                            } else {
-                                fprintf(f,
-                                        "\tmovl\t-%d(%%rbp), %s\n",
-                                        args_off[i],
-                                        ireg[i]);
-                            }
+                    for (int i = 0; i < argc && i < 6; i++) {
+                        if (args_is_double[i]) {
+                            // Double argument -> XMM register
+                            fprintf(f,
+                                "\tmovsd\t-%d(%%rbp), %s\n",
+                                args_off[i],
+                                xmmreg[i]);
+                        }
+                        else if (args_is_ptr[i]) {
+                            fprintf(f,
+                                "\tmovq\t-%d(%%rbp), %s\n",
+                                args_off[i], qreg[i]);
+                        }
+                        else {
+                            // 32-bit integer
+                            fprintf(f,
+                                "\tmovl\t-%d(%%rbp), %s\n",
+                                args_off[i],
+                                ireg[i]);
                         }
                     }
-                
                     if (cur->src1.region == R_NAME) {
                         fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
                     } else {
                         fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
                     }
-                
-                    /* store return value */
+                    /* store return value: movsd if double, movl if int */
                     if (cur->dest.u.offset > 0) {
-                        fprintf(f, "\tmovl\t%%eax, -%d(%%rbp)\n",
+                        if (cur->is_double) {
+                            fprintf(f,
+                                "\tmovsd\t%%xmm0, -%d(%%rbp)\n",
                                 cur->dest.u.offset);
+                        } else {
+                            fprintf(f,
+                                "\tmovl\t%%eax, -%d(%%rbp)\n",
+                                cur->dest.u.offset);
+                        }
                     }
                     argc = 0;
                     break;
@@ -1330,11 +1352,44 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             case O_ASN:
                 if (cur->is_double) {
                     // 8-byte FP assignment: movsd [src]→xmm0; movsd xmm0→[dest]
-                    fprintf(f,
-                        "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                        "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                        -cur->src1.u.offset,
-                        -cur->dest.u.offset);
+                    if (cur->src1.region == R_PARAM) {
+                        // copy from XMM register into the local slot
+                        fprintf(f,
+                            "\tmovsd\t%s, %d(%%rbp)\n",
+                            xmmreg[cur->src1.u.offset],
+                            -cur->dest.u.offset);
+                    } else {
+                        // normal double copy via XMM0
+                        fprintf(f,
+                            "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                            "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                            -cur->src1.u.offset,
+                            -cur->dest.u.offset);
+                    }
+                } else if (cur->is_ptr) {
+                    // 1) load the 64-bit pointer:
+                    if (cur->src1.region == R_GLOBAL) {
+                        // literal: lea .LCn, %rax; movq %rax, -offset(%rbp)
+                        fprintf(f,
+                            "\tleaq\t.LC%d(%%rip), %%rax\n"
+                            "\tmovq\t%%rax, %d(%%rbp)\n",
+                            cur->src1.u.offset,
+                           -cur->dest.u.offset);
+                    } else if (cur->src1.region == R_PARAM) {
+                        // parameter in %rdi/%rsi/…
+                        static const char *pr[] = {"%rdi","%rsi","%rdx","%rcx","%r8","%r9"};
+                        fprintf(f,
+                            "\tmovq\t%s, %d(%%rbp)\n",
+                            pr[cur->src1.u.offset],
+                           -cur->dest.u.offset);
+                    } else {
+                        // local-to-local pointer move
+                        fprintf(f,
+                            "\tmovq\t%d(%%rbp), %%rax\n"
+                            "\tmovq\t%%rax, %d(%%rbp)\n",
+                           -cur->src1.u.offset,
+                           -cur->dest.u.offset);
+                    }
                 } else {
                     // existing 32-bit integer assignment path:
                     if (cur->src1.region == R_IMMED) {

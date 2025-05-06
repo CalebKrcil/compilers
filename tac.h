@@ -39,6 +39,7 @@ struct instr {
    int opcode;
    struct addr dest, src1, src2;
    int is_double;
+   int is_ptr;
    struct instr *next;
 };
 #define O_ADD   3001
