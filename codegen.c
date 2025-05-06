@@ -466,6 +466,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                               t->kids[0]->place,
                               t->kids[1]->place)
                        );
+            t->type  = boolean_typeptr;
             return;
         }
 
@@ -723,6 +724,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
             t->code = code;
             t->place = tmp;
+            t->type  = boolean_typeptr;
             return;
         }       
         /*function Calls*/
@@ -1245,11 +1247,12 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             case O_PARM:
                 // record up to six args
                 if (argc < 6) {
-                    args_off[argc] = cur->src1.u.offset;
-                    args_is_ptr[argc] = (cur->src1.region == R_GLOBAL);
+                    args_off[argc]     = cur->src1.u.offset;
+                    args_region[argc]  = cur->src1.region;
                     args_is_double[argc] = cur->is_double;
-                    args_is_ptr[argc]    = cur->is_ptr;
-                    args_region[argc]    = cur->src1.region;
+                    // preserve “pointer” for globals *or* explicit is_ptr
+                    args_is_ptr[argc]    = (cur->src1.region == R_GLOBAL)
+                                          || cur->is_ptr;
                     argc++;
                 }
                 break;
@@ -1301,9 +1304,19 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                                 xmmreg[i]);
                         }
                         else if (args_is_ptr[i]) {
-                            fprintf(f,
-                                "\tmovq\t-%d(%%rbp), %s\n",
-                                args_off[i], qreg[i]);
+                            if (args_region[i] == R_GLOBAL) {
+                                // a string literal in .rodata
+                                fprintf(f,
+                                    "\tleaq\t.LC%d(%%rip), %s\n",
+                                    args_off[i],
+                                    qreg[i]);
+                            } else {
+                                // a pointer-valued local or parameter
+                                fprintf(f,
+                                    "\tmovq\t-%d(%%rbp), %s\n",
+                                    args_off[i],
+                                    qreg[i]);
+                            }
                         }
                         else {
                             // 32-bit integer

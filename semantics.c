@@ -329,6 +329,12 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         t->type = boolean_typeptr;
     }
 
+    else if (t->symbolname && strcmp(t->symbolname, "equality") == 0 && t->nkids == 2) {
+        //typeptr left  = t->kids[0]->type;
+        //typeptr right = t->kids[1]->type;
+        t->type = boolean_typeptr;
+    }
+
     if (t->symbolname && strcmp(t->symbolname, "assignment") == 0 && t->nkids >= 2) {
         struct tree *lhs = t->kids[0];
         struct tree *rhs = t->kids[1];

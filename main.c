@@ -437,31 +437,32 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
                 printf("Syntax tree for %s:\n", filepath);
                 printtree(root, 0);
             }
+            assign_first(root);
+        
+            assign_follow(root);
+            
+            assign_conditional_labels(root);
+            generate_code(root);
+            if (generate_dot) {
+                char dot_filename[300];
+                snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filepath);
+                print_graph(root, dot_filename);
+                printf("DOT file generated: %s\n", dot_filename);
+            
+                char tac_dot_filename[300];
+                snprintf(tac_dot_filename, sizeof(tac_dot_filename), "%sTAC.dot", filepath);
+                print_graph_TAC(root, tac_dot_filename);
+                printf("TAC DOT file generated: %s\n", tac_dot_filename);
+            }
+            write_asm_file(current_filename, root->code);
+            write_ic_file(current_filename, root->code);
         } else {
             fprintf(stderr, "\nParsing completed with %d semantic error(s)\n", error_count);
             parse_result = 3;  
         }
 
 
-        assign_first(root);
         
-        assign_follow(root);
-        
-        assign_conditional_labels(root);
-        generate_code(root);
-        if (generate_dot) {
-            char dot_filename[300];
-            snprintf(dot_filename, sizeof(dot_filename), "%s.dot", filepath);
-            print_graph(root, dot_filename);
-            printf("DOT file generated: %s\n", dot_filename);
-        
-            char tac_dot_filename[300];
-            snprintf(tac_dot_filename, sizeof(tac_dot_filename), "%sTAC.dot", filepath);
-            print_graph_TAC(root, tac_dot_filename);
-            printf("TAC DOT file generated: %s\n", tac_dot_filename);
-        }
-        write_asm_file(current_filename, root->code);
-        write_ic_file(current_filename, root->code);
         
         free_func_symtab_list(func_symtabs);
     } else {
