@@ -171,45 +171,61 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         struct tree *sizeExpr = initTree->kids[0];
         struct tree *initExpr = initTree->kids[1];
     
-        /* a) declared must be an array and its elemtype must match the ctor’s inner type */
-        if (declType->type->basetype != ARRAY_TYPE ||
-            declType->type->u.a.elemtype != ctorType->type)
+        /*–– 1) first visit all children so their .type fields get set ––*/
+        check_semantics_helper(varId,    current_scope);
+        check_semantics_helper(declType, current_scope);
+        check_semantics_helper(ctorType, current_scope);
+        check_semantics_helper(sizeExpr, current_scope);
+        check_semantics_helper(initExpr, current_scope);
+    
+        /*–– 2) now we can safely pull the array type out of declType ––*/
+        t->type = declType->type;
+    
+        /*–– 3) run your checks ––*/
+        if (!t->type
+            || t->type->basetype != ARRAY_TYPE
+            || t->type->u.a.elemtype != ctorType->type)
         {
             report_semantic_error(
               "mismatched Array<…> in declaration",
               t->lineno);
         }
     
-        /* b) size must be Int */
-        check_semantics_helper(sizeExpr, current_scope);
-        if (sizeExpr->type->basetype != INT_TYPE)
-            report_semantic_error("Array size must be Int", sizeExpr->lineno);
-    
-        /* c) initializer must fit element type */
-        check_semantics_helper(initExpr, current_scope);
-        if (!check_type_compatibility(
-              initExpr->type,
-              declType->type->u.a.elemtype))
+        /* size must be an Int */
+        if (!sizeExpr->type
+            || sizeExpr->type->basetype != INT_TYPE)
         {
-            report_semantic_error("Array init type mismatch", initExpr->lineno);
+            report_semantic_error("Array size must be Int",
+                                  sizeExpr->lineno);
         }
     
-        /* d) insert into symbol‐table if not already there */
+        /* init must match element type */
+        if (!check_type_compatibility(initExpr->type,
+                                      t->type->u.a.elemtype))
+        {
+            report_semantic_error("Array init type mismatch",
+                                  initExpr->lineno);
+        }
+    
+        /*–– 4) insert into symbol‐table ––*/
         if (! lookup_symbol(current_scope, varId->leaf->text)) {
             insert_symbol(current_scope,
                           varId->leaf->text,
                           VARIABLE,
-                          declType->type,
+                          t->type,
                           t->is_mutable,
-                          declType->is_nullable);
+                          t->is_nullable);
+            /* propagate the new symbol info onto the varId node */
+            varId->type      = t->type;
+            varId->is_mutable= t->is_mutable;
+            varId->is_nullable = t->is_nullable;
         }
     
-        t->type = declType->type;
+        /*–– 5) DONE – stop here! ––*/
         printf("DEBUG: Array assignment declaration '%s' type %s\n",
-               varId->leaf->text,
-               typename(t->type));
+               varId->leaf->text, typename(t->type));
         return;
-    }
+    }    
 
     /* 3) var a : Array<T>(n){…} without the explicit “Array” constructor token*/
     if (strcmp(t->symbolname, "arrayDeclaration") == 0) {
@@ -548,11 +564,17 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         //        lhs->type ? typename(lhs->type) : "none",
         //        lhs->lineno);
     
-        if (!(lhs->symbolname && (strcmp(lhs->symbolname, "variableDeclaration") == 0 ||
-        strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
-            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, lhs->leaf->text);
+        if (lhs->symbolname
+            && strcmp(lhs->symbolname, "Identifier") == 0)
+        {
+            /* now .leaf is valid */
+            SymbolTableEntry entry =
+                lookup_symbol(currentFunctionSymtab,
+                              lhs->leaf->text);
             if (entry && !entry->mutable) {
-                report_semantic_error("Assignment to immutable variable", lhs->lineno);
+                report_semantic_error(
+                    "Assignment to immutable variable",
+                    lhs->lineno);
             }
         }
 

@@ -365,130 +365,308 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         //     t->symbolname? t->symbolname:"(null)",
         //     t->prodrule);
 
-        if (strcmp(t->symbolname, "arrayDeclaration")==0 ||
-                strcmp(t->symbolname, "arrayAssignmentDeclaration")==0) {
-            // kids: [0]=varId, [1]=typeNode, [2 or 4]=arrayInitializer
+        if (strcmp(t->symbolname, "arrayAssignmentDeclaration")==0) {
             struct tree *varId    = t->kids[0];
             struct tree *typeNode = t->kids[1];
-            struct tree *initTree = t->symbolname[5]=='A'
-                                    ? t->kids[4]    // arrayAssignmentDeclaration
-                                    : t->kids[2];   // arrayDeclaration
+            struct tree *initTree = t->kids[4];        // “{ size, init }”
             struct tree *sizeExpr = initTree->kids[0];
-            //struct tree *initExpr = initTree->kids[1];
-
-            // 1a) generate the size
+            struct tree *initExpr = initTree->kids[1];
+        
+            /* 1) size*4 → totalBytes */
             generate_code(sizeExpr);
-
-            // 1b) compute bytes = size * sizeof(element)
-            int elemSize = (typeNode->type->u.a.elemtype == double_typeptr ? 8 : 4);
-            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            struct addr bytesPer   = { .region = R_IMMED, .u.offset = 4 };
             struct addr totalBytes = new_temp();
-            struct instr *code = gen(O_IMUL, totalBytes,
-                                    sizeExpr->place, bytesPer);
+            struct instr *code     = gen(O_IMUL,
+                                         totalBytes,
+                                         sizeExpr->place,
+                                         bytesPer);
             code = concat(sizeExpr->code, code);
-
-            // 1c) allocate that many bytes
+        
+            /* 2) malloc into a fresh temp, mark it as pointer */
             struct addr basePtr = new_temp();
-            code = concat(code, gen(O_MALLOC, basePtr, totalBytes, NULL_ADDR));
-
-            // 1d) store the returned pointer into the variable slot
+            struct instr *m = gen(O_MALLOC,
+                                  basePtr,
+                                  totalBytes,
+                                  NULL_ADDR);
+            m->is_ptr = 1;
+            code = concat(code, m);
+        
+            /* 3) copy that temp into the real ‘a’ slot, mark it as pointer */
             SymbolTableEntry entry =
-            lookup_symbol(currentFunctionSymtab, varId->leaf->text);
-            /* use a special ASN that we tag as “pointer” so write_asm emits movq */
-            struct instr *asn_ptr =
-            gen(O_ASN,
-                entry->location,  // dest = your variable slot (“a”)
-                basePtr,          // src1 = the malloc’ed pointer
-                NULL_ADDR);
-            asn_ptr->is_ptr = 1;       // force 64-bit MOVQ
-            code = concat(code, asn_ptr);
-
-            /* (Optional) 1e) loop to initialize each element to initExpr:
-            You can generate_code(initExpr) once, then emit a small
-            i=0; while(i<size) { mem[base+i*elemSize] = initVal; ++i; } */
-
-            t->place = entry->location;   // so later code knows where “a” lives
+                lookup_symbol(currentFunctionSymtab, varId->leaf->text);
+            struct instr *copyPtr = gen(O_ASN,
+                                        entry->location,
+                                        basePtr,
+                                        NULL_ADDR);
+            copyPtr->is_ptr = 1;
+            code = concat(code, copyPtr);
+        
+            /* 4) the zero-init loop (exactly as you already have it) */
+            struct addr idx = new_temp();
+            code = concat(code,
+                          gen(O_ASN,
+                              idx,
+                              (struct addr){ .region=R_IMMED, .u.offset=0 },
+                              NULL_ADDR));
+        
+            struct addr *lblTop  = genlabel();
+            struct addr *lblExit = genlabel();
+            code = concat(code,
+                          gen(D_LABEL,
+                              *lblTop,
+                              NULL_ADDR,
+                              NULL_ADDR));
+        
+            /* if (i>=size) goto exit */
+            struct addr cmp = new_temp();
+            code = concat(code, gen(O_IGE, cmp, idx, sizeExpr->place));
+            code = concat(code, gen(O_BNZ, *lblExit, cmp, NULL_ADDR));
+        
+            /* eltAddr = a + i*4 */
+            struct addr off = new_temp();
+            code = concat(code,
+                          gen(O_IMUL, off, idx, bytesPer));
+            struct addr eltAddr = new_temp();
+            {
+              struct instr *addPtr = gen(O_IADD,
+                                         eltAddr,
+                                         entry->location, /* still ‘a’ */
+                                         off);
+              addPtr->is_ptr = 1;
+              code = concat(code, addPtr);
+            }
+        
+            /* evaluate initExpr, store into [eltAddr] */
+            generate_code(initExpr);
+            code = concat(code, initExpr->code);
+            code = concat(code,
+                          gen(O_ASN,
+                              (struct addr){ .region=R_MEM,
+                                             .u.offset=eltAddr.u.offset },
+                              initExpr->place,
+                              NULL_ADDR));
+        
+            /* i = i + 1; goto top */
+            code = concat(code,
+                          gen(O_IADD,
+                              idx,
+                              idx,
+                              (struct addr){ .region=R_IMMED, .u.offset=1 }));
+            code = concat(code,
+                          gen(O_BR, *lblTop, NULL_ADDR, NULL_ADDR));
+        
+            /* exit: */
+            code = concat(code,
+                          gen(D_LABEL, *lblExit, NULL_ADDR, NULL_ADDR));
+        
+            t->place = entry->location;
             t->code  = code;
             t->type  = typeNode->type;
             return;
         }
+        
 
-        /* --- 2) Array read (r-value): a[i] --- */
         if (strcmp(t->symbolname, "arrayAccess")==0) {
             struct tree *arr = t->kids[0];
             struct tree *idx = t->kids[1];
-
-            // 2a) generate base and index
+        
+            // 1) load the array pointer from its local slot into a temp
             generate_code(arr);
+            struct addr ptrVal = new_temp();
+            struct instr *ldPtr = gen(O_ASN,
+                                     ptrVal,
+                                     arr->place,
+                                     NULL_ADDR);
+            ldPtr->is_ptr = 1;
+            struct instr *code = concat(arr->code, ldPtr);
+        
+            // 2) compute the index
             generate_code(idx);
-
-            // 2b) compute offset = idx * sizeof(elem)
-            int elemSize = (t->type == double_typeptr ? 8 : 4);
-            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            code = concat(code, idx->code);
+        
+            // 3) fixed element size = 4 bytes
+            t->type = arr->type->u.a.elemtype;
+            struct addr bytesPer = { .region = R_IMMED, .u.offset = 4 };
+        
+            // 4) offset = idx * 4
             struct addr offset = new_temp();
-            struct instr *code = gen(O_IMUL, offset,
-                                    idx->place, bytesPer);
-            code = concat(idx->code, code);
-
-            // 2c) compute address = basePtr + offset
-            struct addr addrTemp = new_temp();
-            struct instr *addInstr = gen(O_IADD,
-                                        addrTemp,
-                                        arr->place,  // pointer in R_LOCAL
-                                        offset);     // integer byte‐count
-            addInstr->is_ptr = 1;       // <<< mark as pointer‐add
-            code = concat(code, addInstr);
-
-            // 2d) load from memory into a fresh temp
-            t->place = new_temp();
             code = concat(code,
-                        gen(O_ASN, t->place,
-                            (struct addr){ .region=R_MEM,
-                                            .u.offset=addrTemp.u.offset },
-                            NULL_ADDR));
-
-            t->code = concat(arr->code, code);
+                          gen(O_IMUL, offset, idx->place, bytesPer));
+        
+            // 5) addrTemp = ptrVal + offset
+            struct addr addrTemp = new_temp();
+            struct instr *addPtr = gen(O_IADD,
+                                       addrTemp,
+                                       ptrVal,
+                                       offset);
+            addPtr->is_ptr = 1;
+            code = concat(code, addPtr);
+        
+            // 6) load the 32-bit element from memory into a new temp
+            t->place = new_temp();
+            struct instr *loadElem = gen(O_ASN,
+                                        t->place,
+                                        (struct addr){ .region=R_MEM,
+                                                       .u.offset=addrTemp.u.offset },
+                                        NULL_ADDR);
+            code = concat(code, loadElem);
+        
+            t->code = code;
             return;
         }
 
+        if (strcmp(t->symbolname, "arrayDeclaration")==0) {
+            struct tree *varId    = t->kids[0];
+            struct tree *typeNode = t->kids[1];
+            struct tree *initTree = t->kids[2];        // “(size) { 0 }”
+            struct tree *sizeExpr = initTree->kids[0];
+        
+            /* 1) size*4 → totalBytes */
+            generate_code(sizeExpr);
+            struct addr bytesPer   = { .region = R_IMMED, .u.offset = 4 };
+            struct addr totalBytes = new_temp();
+            struct instr *code     = gen(O_IMUL,
+                                         totalBytes,
+                                         sizeExpr->place,
+                                         bytesPer);
+            code = concat(sizeExpr->code, code);
+        
+            /* 2) malloc into temp, mark pointer */
+            struct addr basePtr = new_temp();
+            struct instr *m = gen(O_MALLOC,
+                                  basePtr,
+                                  totalBytes,
+                                  NULL_ADDR);
+            m->is_ptr = 1;
+            code = concat(code, m);
+        
+            /* 3) copy temp → a’s slot, mark pointer */
+            SymbolTableEntry entry =
+                lookup_symbol(currentFunctionSymtab, varId->leaf->text);
+            struct instr *copyPtr = gen(O_ASN,
+                                        entry->location,
+                                        basePtr,
+                                        NULL_ADDR);
+            copyPtr->is_ptr = 1;
+            code = concat(code, copyPtr);
+        
+            /* 4) zero-init loop */
+            struct addr idx = new_temp();
+            code = concat(code,
+                          gen(O_ASN,
+                              idx,
+                              (struct addr){ .region=R_IMMED, .u.offset=0 },
+                              NULL_ADDR));
+        
+            struct addr *lblTop  = genlabel();
+            struct addr *lblExit = genlabel();
+            code = concat(code,
+                          gen(D_LABEL,
+                              *lblTop,
+                              NULL_ADDR,
+                              NULL_ADDR));
+        
+            /* if (i>=size) goto exit */
+            struct addr cmp = new_temp();
+            code = concat(code, gen(O_IGE, cmp, idx, sizeExpr->place));
+            code = concat(code, gen(O_BNZ, *lblExit, cmp, NULL_ADDR));
+        
+            /* eltAddr = a + i*4 */
+            struct addr off = new_temp();
+            code = concat(code,
+                          gen(O_IMUL, off, idx, bytesPer));
+            struct addr eltAddr = new_temp();
+            {
+              struct instr *addPtr = gen(O_IADD,
+                                         eltAddr,
+                                         entry->location,
+                                         off);
+              addPtr->is_ptr = 1;
+              code = concat(code, addPtr);
+            }
+        
+            /* store 0 into [eltAddr] */
+            code = concat(code,
+                          gen(O_ASN,
+                              (struct addr){ .region=R_MEM,
+                                             .u.offset=eltAddr.u.offset },
+                              (struct addr){ .region=R_IMMED, .u.offset=0 },
+                              NULL_ADDR));
+        
+            /* i = i + 1; goto top */
+            code = concat(code,
+                          gen(O_IADD,
+                              idx,
+                              idx,
+                              (struct addr){ .region=R_IMMED, .u.offset=1 }));
+            code = concat(code,
+                          gen(O_BR, *lblTop, NULL_ADDR, NULL_ADDR));
+        
+            /* exit: */
+            code = concat(code,
+                          gen(D_LABEL, *lblExit, NULL_ADDR, NULL_ADDR));
+        
+            t->place = entry->location;
+            t->code  = code;
+            t->type  = typeNode->type;
+            return;
+        }
+        
         /* --- 3) Array write: a[i] = rhs --- */
         if (strcmp(t->symbolname, "assignment")==0
-            && t->kids[0]
-            && strcmp(t->kids[0]->symbolname, "arrayAccess")==0) {
+        && t->kids[0]
+        && strcmp(t->kids[0]->symbolname, "arrayAccess")==0)
+        {
             struct tree *access = t->kids[0];
             struct tree *arr    = access->kids[0];
             struct tree *idx    = access->kids[1];
             struct tree *rhs    = t->kids[1];
 
-            // 3a) generate base, index, and rhs
+            /* 1) load ‘a’ pointer */
             generate_code(arr);
+            struct addr ptrVal = new_temp();
+            struct instr *ldPtr = gen(
+                O_ASN,
+                ptrVal,
+                arr->place,
+                NULL_ADDR);
+            ldPtr->is_ptr = 1;
+            struct instr *code = concat(arr->code, ldPtr);
+
+            /* 2) index and RHS */
             generate_code(idx);
+            code = concat(code, idx->code);
             generate_code(rhs);
 
-            // 3b) compute element address
-            int elemSize = (access->type == double_typeptr ? 8 : 4);
-            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            /* 3) element size = 4 */
+            t->type = rhs->type;
+            struct addr bytesPer = { .region = R_IMMED, .u.offset = 4 };
+
+            /* 4) offset = idx * 4 */
             struct addr offset = new_temp();
-            struct instr *code = gen(O_IMUL, offset,
-                                    idx->place, bytesPer);
-            code = concat(idx->code, code);
+            code = concat(code,
+                gen(O_IMUL, offset, idx->place, bytesPer));
 
+            /* 5) eltAddr = ptrVal + offset */
             struct addr addrTemp = new_temp();
-            struct instr *addInstr = gen(O_IADD,
-                                        addrTemp,
-                                        arr->place,
-                                        offset);
-            addInstr->is_ptr = 1;       // <<< pointer‐add here too
-            code = concat(code, addInstr);
+            struct instr *addPtr = gen(
+                O_IADD,
+                addrTemp,
+                ptrVal,
+                offset);
+            addPtr->is_ptr = 1;
+            code = concat(code, addPtr);
 
-            // 3c) store rhs into that memory location
-            struct instr *store = gen(O_ASN,
-                                    (struct addr){ .region=R_MEM,
-                                                    .u.offset=addrTemp.u.offset },
-                                    rhs->place,
-                                    NULL_ADDR);
-            code = concat(code, store);
+            /* 6) store rhs into [eltAddr] */
+            struct instr *storeElem = gen(
+                O_ASN,
+                (struct addr){ .region=R_MEM,
+                            .u.offset=addrTemp.u.offset },
+                rhs->place,
+                NULL_ADDR);
+            code = concat(code, storeElem);
 
+            /* done */
             t->code  = concat(concat(arr->code, rhs->code), code);
             t->place = rhs->place;
             t->type  = rhs->type;
@@ -571,8 +749,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                        );
             return;
         }
-
-        
 
         /*multiplicative_expression*/
         else if (strcmp(t->symbolname, "multiplicative_expression") == 0
@@ -1937,6 +2113,11 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                -cur->dest.u.offset);
             break;
           }
+
+          case O_LBL:
+            // inline labels generated by array‐init loops, etc.
+            fprintf(f, ".L%d:\n", cur->dest.u.offset);
+            break;
 
           case O_GOTO:
             fprintf(f, "\tjmp\t.L%d\n", cur->dest.u.offset);

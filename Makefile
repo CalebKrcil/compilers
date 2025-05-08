@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc -g -O0
 LEX = flex
 YACC = bison
 CFLAGS = -Wall

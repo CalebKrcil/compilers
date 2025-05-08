@@ -3,8 +3,8 @@
 /* global variable declarations */
 
 .code
-COS       main              none:0            none:0          
-TAN       label:0           main              none:0          
+SIN       main              none:0            none:0          
+COS       label:0           main              none:0          
 ALLOC     none:0            immed:176         none:0          
 LCONT     local:88          immed:0           none:0          
 ASN       local:8           local:88          none:0          
@@ -45,4 +45,4 @@ PARM      none:0            local:72          none:0
 CALL      none:0            println           none:0          
 DEALLOC   none:0            immed:176         none:0          
 RETURN    none:0            none:0            none:0          
-(null)    label:0           main              none:0          
+SRAND     label:0           main              none:0          
