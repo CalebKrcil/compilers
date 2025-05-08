@@ -136,6 +136,112 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         return;
     // fprintf(stderr, "DEBUG: check_semantics_helper called for node: %s\n", 
     //         t->symbolname ? t->symbolname : "NULL");
+
+    printf("SEMANTIC-NODE: %-25s  nkids=%d\n",
+        t->symbolname ? t->symbolname : "(null)", t->nkids);
+
+    if (t->symbolname &&
+        (strcmp(t->symbolname, "genericType") == 0 ||
+        strcmp(t->symbolname, "nullableGenericType") == 0)) {
+        printf("DEBUG: Generic type encountered\n");
+        check_semantics_helper(t->kids[1], current_scope);
+        return;
+    }
+
+    if (strcmp(t->symbolname, "assignment") == 0 &&
+        t->nkids == 1 &&
+        t->kids[0] &&
+        strcmp(t->kids[0]->symbolname, "arrayAssignmentDeclaration") == 0)
+    {
+        printf("here\n");
+        /* Delegate entirely to the arrayAssignmentDeclaration logic below */
+        check_semantics_helper(t->kids[0], current_scope);
+        /* Propagate the resultant type back onto the assignment node */
+        t->type = t->kids[0]->type;
+        return;
+    }
+
+    /* 2) var a : Array<T> = Array<T>(n){…} */
+    if (strcmp(t->symbolname, "arrayAssignmentDeclaration") == 0) {
+        printf("DEBUG: Array assignment declaration encountered\n");
+        struct tree *varId    = t->kids[0];
+        struct tree *declType = t->kids[1];   // the “: Array<T>” node
+        struct tree *ctorType = t->kids[3];   // the “<T>” node in Array<T>(...)
+        struct tree *initTree = t->kids[4];
+        struct tree *sizeExpr = initTree->kids[0];
+        struct tree *initExpr = initTree->kids[1];
+    
+        /* a) declared must be an array and its elemtype must match the ctor’s inner type */
+        if (declType->type->basetype != ARRAY_TYPE ||
+            declType->type->u.a.elemtype != ctorType->type)
+        {
+            report_semantic_error(
+              "mismatched Array<…> in declaration",
+              t->lineno);
+        }
+    
+        /* b) size must be Int */
+        check_semantics_helper(sizeExpr, current_scope);
+        if (sizeExpr->type->basetype != INT_TYPE)
+            report_semantic_error("Array size must be Int", sizeExpr->lineno);
+    
+        /* c) initializer must fit element type */
+        check_semantics_helper(initExpr, current_scope);
+        if (!check_type_compatibility(
+              initExpr->type,
+              declType->type->u.a.elemtype))
+        {
+            report_semantic_error("Array init type mismatch", initExpr->lineno);
+        }
+    
+        /* d) insert into symbol‐table if not already there */
+        if (! lookup_symbol(current_scope, varId->leaf->text)) {
+            insert_symbol(current_scope,
+                          varId->leaf->text,
+                          VARIABLE,
+                          declType->type,
+                          t->is_mutable,
+                          declType->is_nullable);
+        }
+    
+        t->type = declType->type;
+        printf("DEBUG: Array assignment declaration '%s' type %s\n",
+               varId->leaf->text,
+               typename(t->type));
+        return;
+    }
+
+    /* 3) var a : Array<T>(n){…} without the explicit “Array” constructor token*/
+    if (strcmp(t->symbolname, "arrayDeclaration") == 0) {
+        printf("DEBUG: Array declaration encountered\n");
+        struct tree *varId    = t->kids[0];
+        struct tree *declType = t->kids[1];
+        struct tree *initTree = t->kids[2];
+        struct tree *sizeExpr = initTree->kids[0];
+        struct tree *initExpr = initTree->kids[1];
+
+        check_semantics_helper(sizeExpr, current_scope);
+        if (sizeExpr->type->basetype != INT_TYPE)
+            report_semantic_error("Array size must be Int", sizeExpr->lineno);
+
+        check_semantics_helper(initExpr, current_scope);
+        if (!check_type_compatibility(initExpr->type,
+              declType->type->u.a.elemtype))
+            report_semantic_error("Array init type mismatch", initExpr->lineno);
+
+        insert_symbol(current_scope,
+                      varId->leaf->text,
+                      VARIABLE,
+                      declType->type,
+                      t->is_mutable,
+                      declType->is_nullable);
+
+        t->type = declType->type;
+        printf("DEBUG: Array declaration '%s' type %s\n",
+               varId->leaf->text, typename(t->type));
+        return;
+    }
+
     if (t->symbolname &&
        (strcmp(t->symbolname, "variableDeclaration") == 0 ||
         strcmp(t->symbolname, "constVariableDeclaration") == 0)) {
@@ -168,7 +274,7 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             }
         }
     }
-    
+
     // printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
     //        t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
     

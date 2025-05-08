@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tree.h"
 #include "type.h"
 #include "symtab.h"
 #include "k0gram.tab.h"
@@ -96,12 +97,33 @@ typeptr alcfunctype(struct tree * r, struct tree * p, SymbolTable st)
 /* Construct an array type from syntax (sub)trees.
    This routine should eventually use the provided subtrees to set the element type and size.
 */
-typeptr alcarraytype(struct tree * s, struct tree * e)
-{
-    typeptr rv = alctype(ARRAY_TYPE);
-    if (rv == NULL) return NULL;
-    /* TODO: Fill in element type and size from s and e */
-    return rv;
+
+typeptr alcarraytype(struct tree *elemNode, struct tree *sizeNode) {
+   /* debug: entry */
+   printf("In alcarraytype\n");
+
+   /* allocate a fresh ARRAY_TYPE object */
+   typeptr rv = alctype(ARRAY_TYPE);
+   if (!rv) return NULL;
+
+   /* element type comes from the parser’s genericType node */
+   rv->u.a.elemtype = elemNode->type;
+
+   /* if sizeNode is an integer literal, record it; otherwise leave unspecified */
+   if (sizeNode
+       && sizeNode->leaf
+       && sizeNode->leaf->category == IntegerLiteral) {
+       rv->u.a.size = sizeNode->leaf->value.ival;
+   } else {
+       rv->u.a.size = -1;  /* “unspecified” */
+   }
+
+   /* debug: show what we got */
+   printf("alcarraytype: size=%d, elemtype=%s\n",
+          rv->u.a.size,
+          typename(rv->u.a.elemtype));
+
+   return rv;
 }
 
 char *typename(typeptr t)

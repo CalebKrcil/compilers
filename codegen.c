@@ -356,6 +356,134 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         //     t->symbolname? t->symbolname:"(null)",
         //     t->prodrule);
 
+        if (strcmp(t->symbolname, "arrayDeclaration")==0 ||
+                strcmp(t->symbolname, "arrayAssignmentDeclaration")==0) {
+            // kids: [0]=varId, [1]=typeNode, [2 or 4]=arrayInitializer
+            struct tree *varId    = t->kids[0];
+            struct tree *typeNode = t->kids[1];
+            struct tree *initTree = t->symbolname[5]=='A'
+                                    ? t->kids[4]    // arrayAssignmentDeclaration
+                                    : t->kids[2];   // arrayDeclaration
+            struct tree *sizeExpr = initTree->kids[0];
+            //struct tree *initExpr = initTree->kids[1];
+
+            // 1a) generate the size
+            generate_code(sizeExpr);
+
+            // 1b) compute bytes = size * sizeof(element)
+            int elemSize = (typeNode->type->u.a.elemtype == double_typeptr ? 8 : 4);
+            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            struct addr totalBytes = new_temp();
+            struct instr *code = gen(O_IMUL, totalBytes,
+                                    sizeExpr->place, bytesPer);
+            code = concat(sizeExpr->code, code);
+
+            // 1c) allocate that many bytes
+            struct addr basePtr = new_temp();
+            struct instr *parm = gen(O_PARM, NULL_ADDR, totalBytes, NULL_ADDR);
+            code = concat(code, parm);
+
+            //  —> call malloc, result in basePtr
+            struct addr mallocName = { .region = R_NAME,
+                                    .u.name   = strdup("malloc") };
+            code = concat(code,
+                        gen(O_MALLOC, basePtr, mallocName, NULL_ADDR));
+
+            // 1d) store the returned pointer into the variable slot
+            SymbolTableEntry entry =
+            lookup_symbol(currentFunctionSymtab, varId->leaf->text);
+            code = concat(code,
+                        gen(O_ASN,
+                            entry->location,
+                            basePtr,
+                            NULL_ADDR));
+
+            /* (Optional) 1e) loop to initialize each element to initExpr:
+            You can generate_code(initExpr) once, then emit a small
+            i=0; while(i<size) { mem[base+i*elemSize] = initVal; ++i; } */
+
+            t->place = entry->location;   // so later code knows where “a” lives
+            t->code  = code;
+            t->type  = typeNode->type;
+            return;
+        }
+
+        /* --- 2) Array read (r-value): a[i] --- */
+        if (strcmp(t->symbolname, "arrayAccess")==0) {
+            struct tree *arr = t->kids[0];
+            struct tree *idx = t->kids[1];
+
+            // 2a) generate base and index
+            generate_code(arr);
+            generate_code(idx);
+
+            // 2b) compute offset = idx * sizeof(elem)
+            int elemSize = (t->type == double_typeptr ? 8 : 4);
+            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            struct addr offset = new_temp();
+            struct instr *code = gen(O_IMUL, offset,
+                                    idx->place, bytesPer);
+            code = concat(idx->code, code);
+
+            // 2c) compute address = basePtr + offset
+            struct addr addrTemp = new_temp();
+            code = concat(code,
+                        gen(O_IADD, addrTemp,
+                            arr->place, offset));
+
+            // 2d) load from memory into a fresh temp
+            t->place = new_temp();
+            code = concat(code,
+                        gen(O_ASN, t->place,
+                            (struct addr){ .region=R_MEM,
+                                            .u.offset=addrTemp.u.offset },
+                            NULL_ADDR));
+
+            t->code = concat(arr->code, code);
+            return;
+        }
+
+        /* --- 3) Array write: a[i] = rhs --- */
+        if (strcmp(t->symbolname, "assignment")==0
+            && t->kids[0]
+            && strcmp(t->kids[0]->symbolname, "arrayAccess")==0) {
+            struct tree *access = t->kids[0];
+            struct tree *arr    = access->kids[0];
+            struct tree *idx    = access->kids[1];
+            struct tree *rhs    = t->kids[1];
+
+            // 3a) generate base, index, and rhs
+            generate_code(arr);
+            generate_code(idx);
+            generate_code(rhs);
+
+            // 3b) compute element address
+            int elemSize = (access->type == double_typeptr ? 8 : 4);
+            struct addr bytesPer = { .region = R_IMMED, .u.offset = elemSize };
+            struct addr offset = new_temp();
+            struct instr *code = gen(O_IMUL, offset,
+                                    idx->place, bytesPer);
+            code = concat(idx->code, code);
+
+            struct addr addrTemp = new_temp();
+            code = concat(code,
+                        gen(O_IADD, addrTemp,
+                            arr->place, offset));
+
+            // 3c) store rhs into that memory location
+            struct instr *store = gen(O_ASN,
+                                    (struct addr){ .region=R_MEM,
+                                                    .u.offset=addrTemp.u.offset },
+                                    rhs->place,
+                                    NULL_ADDR);
+            code = concat(code, store);
+
+            t->code  = concat(concat(arr->code, rhs->code), code);
+            t->place = rhs->place;
+            t->type  = rhs->type;
+            return;
+        }
+
         /*assignment*/
         if (strcmp(t->symbolname, "assignment")==0 && t->nkids == 2) {
             struct tree *lhs = t->kids[0]; 
@@ -1265,6 +1393,23 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     fprintf(f, "\tsubq\t$%d, %%rsp\n", cur->src1.u.offset);
                 }
                 break;
+
+            case O_MALLOC: {
+                // src1 holds the byte‐count (in reg/immed), dest.u.offset is the local slot
+                if (cur->src1.region == R_IMMED) {
+                    fprintf(f, "\tmovl\t$%d, %%edi\n", cur->src1.u.offset);
+                } else {
+                    // we assume locals live at -offset(%rbp)
+                    fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n",
+                            cur->src1.u.offset);
+                }
+                // actually call malloc
+                fprintf(f, "\tcall\tmalloc\n");
+                // save the returned pointer (in %rax) into the local slot
+                fprintf(f, "\tmovq\t%%rax, -%d(%%rbp)\n",
+                        cur->dest.u.offset);
+                break;
+            }
 
             case O_DEALLOC:
                 // ignore the dealloc at function‐end (handled in D_END),

@@ -89,8 +89,9 @@ struct instr {
 #define O_POP     3042   
 #define O_ALLOC   3043   
 #define O_DEALLOC 3044   
-#define O_IMOD    3045
-#define O_DMOD    4046
+#define O_MALLOC  3045 
+#define O_IMOD    3046
+#define O_DMOD    4047
 #define D_GLOB  3051
 #define D_PROC  3052
 #define D_LOCAL 3053
