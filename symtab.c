@@ -128,6 +128,10 @@ SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s) {
 }
 
 void check_undeclared(SymbolTable st, char *s) {
+    // Array is a built-in type constructor, not a variable
+    if (strcmp(s, "Array") == 0) 
+        return;
+
     if (!lookup_symbol(st, s)) {
         fprintf(stderr, "Error: Undeclared variable '%s'\n", s);
         error_count++; 
