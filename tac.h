@@ -90,6 +90,8 @@ struct instr {
 #define O_ALLOC   3043   
 #define O_DEALLOC 3044   
 #define O_IMOD    3045
+
+
 #define O_DMOD    4046
 #define D_GLOB  3051
 #define D_PROC  3052
@@ -97,6 +99,15 @@ struct instr {
 #define D_LABEL 3054
 #define D_END   3055
 #define D_PROT  3056 
+#define O_ABS   3057
+#define O_MAX   3058
+#define O_MIN   3059
+#define O_POW   3060
+#define O_SIN   3061
+#define O_COS   3062
+#define O_TAN   3063
+#define O_RAND  3064
+#define O_SRAND 3065
 
 struct instr *gen(int, struct addr, struct addr, struct addr);
 struct instr *concat(struct instr *, struct instr *);

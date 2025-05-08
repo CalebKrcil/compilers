@@ -40,6 +40,15 @@ static void add_string_literal(const char *label, const char *text) {
     strcount++;
 }
 
+struct addr empty_addr() {
+    struct addr a;
+    a.region = R_NONE;
+    a.u.offset = 0;
+    return a;
+}
+
+
+
 static int add_real_literal(const char *label, double v) {
     dbltab = realloc(dbltab, (dblcount+1)*sizeof *dbltab);
     strcpy(dbltab[dblcount].label, label);
@@ -763,24 +772,98 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         /*function Calls*/
         else if (strcmp(t->symbolname, "functionCall") == 0) {
             struct tree *fnNode = t->kids[0];
-            SymbolTableEntry fentry =
-              lookup_symbol(globalSymtab, fnNode->leaf->text);
-            if (!fentry)
-              fentry = lookup_symbol(currentFunctionSymtab, fnNode->leaf->text);
+            const char *methodName = fnNode->leaf->text;
         
-            // 1) flatten the argument list
+            // 1) Check for builtin math functions
             struct instr *code = NULL;
             struct tree **args = NULL;
             int argc = 0;
             for (int i = 1; i < t->nkids; i++)
-              flattenExprList(t->kids[i], &args, &argc);
+                flattenExprList(t->kids[i], &args, &argc);
         
-            // 2) generate code + PARM for each argument
+            if (strcmp(methodName, "java.lang.Math.abs") == 0 && argc == 1) {
+                generate_code(args[0]);
+                t->place = new_temp();
+                t->code = concat(args[0]->code, gen(O_ABS, t->place, args[0]->place, NULL_ADDR));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.max") == 0 && argc == 2) {
+                generate_code(args[0]); generate_code(args[1]);
+                t->place = new_temp();
+                t->code = concat(concat(args[0]->code, args[1]->code),
+                                 gen(O_MAX, t->place, args[0]->place, args[1]->place));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.min") == 0 && argc == 2) {
+                generate_code(args[0]); generate_code(args[1]);
+                t->place = new_temp();
+                t->code = concat(concat(args[0]->code, args[1]->code),
+                                 gen(O_MIN, t->place, args[0]->place, args[1]->place));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.pow") == 0 && argc == 2) {
+                generate_code(args[0]); generate_code(args[1]);
+                t->place = new_temp();
+                t->code = concat(concat(args[0]->code, args[1]->code),
+                                 gen(O_POW, t->place, args[0]->place, args[1]->place));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.cos") == 0 && argc == 1) {
+                generate_code(args[0]);
+                t->place = new_temp();
+                t->code = concat(args[0]->code, gen(O_COS, t->place, args[0]->place, NULL_ADDR));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.sin") == 0 && argc == 1) {
+                generate_code(args[0]);
+                t->place = new_temp();
+                t->code = concat(args[0]->code, gen(O_SIN, t->place, args[0]->place, NULL_ADDR));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(methodName, "java.lang.Math.tan") == 0 && argc == 1) {
+                generate_code(args[0]);
+                t->place = new_temp();
+                t->code = concat(args[0]->code, gen(O_TAN, t->place, args[0]->place, NULL_ADDR));
+                t->type = double_typeptr;
+                free(args);
+                return;
+            } else if (strcmp(fnNode->leaf->text, "java.util.Random.nextInt") == 0) {
+                static int seeded = 0;
+                struct instr *code = NULL;
+            
+                if (!seeded) {
+                    struct instr *srand_tac = gen(O_SRAND, empty_addr(), empty_addr(), empty_addr());
+                    code = append(code, srand_tac);
+                    seeded = 1;
+                }
+            
+                t->place = new_temp();
+                struct instr *rand_tac = gen(O_RAND, t->place, empty_addr(), empty_addr());
+                code = append(code, rand_tac);
+            
+                t->code = append(t->code, code);
+                return;
+            }
+            
+            
+            
+        
+            // 2) Look up symbol
+            SymbolTableEntry fentry =
+                lookup_symbol(globalSymtab, (char *)methodName);
+            if (!fentry)
+                fentry = lookup_symbol(currentFunctionSymtab, (char *)methodName);
+        
+            // 3) Generate code for args + PARMs
             for (int i = 0; i < argc; i++) {
                 generate_code(args[i]);
                 code = concat(code, args[i]->code);
-          
-                // build the PARM and tag it if the tree node was double-typed
                 struct instr *p = gen(O_PARM, NULL_ADDR, args[i]->place, NULL_ADDR);
                 p->is_double = (args[i]->type == double_typeptr);
                 p->is_ptr    = (args[i]->type == string_typeptr);
@@ -788,33 +871,29 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             free(args);
         
-            // 3) build the CALL itself
+            // 4) CALL instruction
             struct addr nameAddr = {
-              .region = R_NAME,
-              .u.name = strdup(fentry->s)
+                .region = R_NAME,
+                .u.name = strdup(fentry->s)
             };
         
-            // test whether the function actually returns something
-            int returnsValue = fentry
-              && fentry->type
-              && fentry->type->u.f.returntype != null_typeptr;
+            int returnsValue = fentry &&
+                               fentry->type &&
+                               fentry->type->u.f.returntype != null_typeptr;
         
-              if (returnsValue) {
+            if (returnsValue) {
                 t->place = new_temp();
                 struct instr *callInstr = gen(O_CALL, t->place, nameAddr, NULL_ADDR);
-                // tag the call as returning a double if so
-                callInstr->is_double =
-                    (fentry->type->u.f.returntype == double_typeptr);
+                callInstr->is_double = (fentry->type->u.f.returntype == double_typeptr);
                 code = concat(code, callInstr);
             } else {
                 t->place = (struct addr){ R_NONE, { .offset = 0 } };
-                code = concat(code,
-                              gen(O_CALL, NULL_ADDR, nameAddr, NULL_ADDR));
+                code = concat(code, gen(O_CALL, NULL_ADDR, nameAddr, NULL_ADDR));
             }
         
             t->code = code;
             return;
-        }
+        }   
 
         /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
@@ -1705,7 +1784,93 @@ void write_asm_file(const char *input_filename, struct instr *code) {
           case O_POP:
             fprintf(f, "\tpopq\t%%rbp\n");
             break;
-
+            case O_ABS:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovapd\t%%xmm0, %%xmm1\n"
+                "\tmovabsq\t$0x7FFFFFFFFFFFFFFF, %%rax\n"
+                "\tmovq\t%%rax, %%xmm2\n"
+                "\tandpd\t%%xmm2, %%xmm1\n"
+                "\tmovsd\t%%xmm1, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_MAX:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%d(%%rbp), %%xmm1\n"
+                "\tmaxsd\t%%xmm1, %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->src2.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_MIN:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%d(%%rbp), %%xmm1\n"
+                "\tminsd\t%%xmm1, %%xmm0\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->src2.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_POW:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tmovsd\t%d(%%rbp), %%xmm1\n"
+                "\tcall\tpow\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->src2.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_SIN:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tcall\tsin\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_COS:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tcall\tcos\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_TAN:
+            fprintf(f,
+                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                "\tcall\ttan\n"
+                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                -cur->src1.u.offset,
+                -cur->dest.u.offset);
+            break;
+        
+        case O_RAND:
+            fprintf(f,
+                "\tcall\trand\n"
+                "\tmovl\t%%eax, %d(%%rbp)\n",
+                -cur->dest.u.offset);
+            break;
+        
+        case O_SRAND:
+            fprintf(f,
+                "\tmovl\t$0, %%edi\n"
+                "\tcall\ttime\n"
+                "\tmovq\t%%rax, %%rdi\n"
+                "\tcall\tsrand\n");
+            break;
+        
           default:
             // any unhandled opcode
             fprintf(f, "\t# unhandled opcode %s\n",
