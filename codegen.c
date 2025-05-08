@@ -1878,6 +1878,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             break;
         }
     }
+    fprintf(f, "\t.section .note.GNU-stack,\"\",@progbits\n");
 
     fclose(f);
 }

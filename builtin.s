@@ -118,3 +118,4 @@ main:
 	ret
 .LFE0:
 	.size	main, .-main
+	.section .note.GNU-stack,"",@progbits
