@@ -420,7 +420,6 @@ int process_file(char *filename, int print_tree, int print_symtab, int generate_
         }
 
         if (error_count == 0) {
-            // printf("No errors\n");
 
             if (print_symtab) {
                 print_symbols(globalSymtab);

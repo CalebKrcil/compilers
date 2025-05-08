@@ -33,7 +33,6 @@ int check_type_compatibility(typeptr expected, typeptr actual) {
 }
 
 int is_operator(int prodrule) {
-    // printf("DEBUG: Checking if prodrule %d is an operator\n", prodrule);
     switch (prodrule) {
         case ADD: /* additive_expression with ADD */
         case SUB: /* additive_expression with SUB */
@@ -68,21 +67,16 @@ char *resolve_qualified_name(struct tree *t) {
         return NULL;
 
     char *result = NULL;
-    if (t->symbolname) {
-        // fprintf(stderr, "DEBUG: Resolving node with symbolname: %s\n", t->symbolname);
-    }
 
     if (t->symbolname && strcmp(t->symbolname, "functionCall") == 0) {
         if (t->nkids > 0) {
             result = resolve_qualified_name(t->kids[0]);
-            // fprintf(stderr, "DEBUG: functionCall node resolved to: %s\n", result);
             return result;
         }
     }
 
     if (t->leaf) {
         result = strdup(t->leaf->text);
-        // fprintf(stderr, "DEBUG: Leaf node resolved to: %s\n", result);
         return result;
     }
 
@@ -109,13 +103,11 @@ char *resolve_qualified_name(struct tree *t) {
                 result = tmp;
             }
         }
-        // fprintf(stderr, "DEBUG: qualifiedName node resolved to: %s\n", result);
         return result;
     }
     
     if (t->symbolname) {
         result = strdup(t->symbolname);
-        // fprintf(stderr, "DEBUG: Fallback node resolved to: %s\n", result);
         return result;
     }
     
@@ -134,16 +126,10 @@ int is_null_literal(struct tree *t) {
 void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
     if (!t)
         return;
-    // fprintf(stderr, "DEBUG: check_semantics_helper called for node: %s\n", 
-    //         t->symbolname ? t->symbolname : "NULL");
-
-    printf("SEMANTIC-NODE: %-25s  nkids=%d\n",
-        t->symbolname ? t->symbolname : "(null)", t->nkids);
 
     if (t->symbolname &&
         (strcmp(t->symbolname, "genericType") == 0 ||
         strcmp(t->symbolname, "nullableGenericType") == 0)) {
-        printf("DEBUG: Generic type encountered\n");
         check_semantics_helper(t->kids[1], current_scope);
         return;
     }
@@ -153,35 +139,27 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         t->kids[0] &&
         strcmp(t->kids[0]->symbolname, "arrayAssignmentDeclaration") == 0)
     {
-        printf("here\n");
-        /* Delegate entirely to the arrayAssignmentDeclaration logic below */
         check_semantics_helper(t->kids[0], current_scope);
-        /* Propagate the resultant type back onto the assignment node */
         t->type = t->kids[0]->type;
         return;
     }
 
-    /* 2) var a : Array<T> = Array<T>(n){…} */
     if (strcmp(t->symbolname, "arrayAssignmentDeclaration") == 0) {
-        printf("DEBUG: Array assignment declaration encountered\n");
         struct tree *varId    = t->kids[0];
-        struct tree *declType = t->kids[1];   // the “: Array<T>” node
-        struct tree *ctorType = t->kids[3];   // the “<T>” node in Array<T>(...)
+        struct tree *declType = t->kids[1];
+        struct tree *ctorType = t->kids[3];
         struct tree *initTree = t->kids[4];
         struct tree *sizeExpr = initTree->kids[0];
         struct tree *initExpr = initTree->kids[1];
     
-        /*–– 1) first visit all children so their .type fields get set ––*/
         check_semantics_helper(varId,    current_scope);
         check_semantics_helper(declType, current_scope);
         check_semantics_helper(ctorType, current_scope);
         check_semantics_helper(sizeExpr, current_scope);
         check_semantics_helper(initExpr, current_scope);
     
-        /*–– 2) now we can safely pull the array type out of declType ––*/
         t->type = declType->type;
     
-        /*–– 3) run your checks ––*/
         if (!t->type
             || t->type->basetype != ARRAY_TYPE
             || t->type->u.a.elemtype != ctorType->type)
@@ -191,7 +169,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
               t->lineno);
         }
     
-        /* size must be an Int */
         if (!sizeExpr->type
             || sizeExpr->type->basetype != INT_TYPE)
         {
@@ -199,7 +176,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                                   sizeExpr->lineno);
         }
     
-        /* init must match element type */
         if (!check_type_compatibility(initExpr->type,
                                       t->type->u.a.elemtype))
         {
@@ -207,7 +183,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                                   initExpr->lineno);
         }
     
-        /*–– 4) insert into symbol‐table ––*/
         if (! lookup_symbol(current_scope, varId->leaf->text)) {
             insert_symbol(current_scope,
                           varId->leaf->text,
@@ -215,21 +190,15 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                           t->type,
                           t->is_mutable,
                           t->is_nullable);
-            /* propagate the new symbol info onto the varId node */
             varId->type      = t->type;
             varId->is_mutable= t->is_mutable;
             varId->is_nullable = t->is_nullable;
         }
     
-        /*–– 5) DONE – stop here! ––*/
-        printf("DEBUG: Array assignment declaration '%s' type %s\n",
-               varId->leaf->text, typename(t->type));
         return;
     }    
 
-    /* 3) var a : Array<T>(n){…} without the explicit “Array” constructor token*/
     if (strcmp(t->symbolname, "arrayDeclaration") == 0) {
-        printf("DEBUG: Array declaration encountered\n");
         struct tree *varId    = t->kids[0];
         struct tree *declType = t->kids[1];
         struct tree *initTree = t->kids[2];
@@ -253,8 +222,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                       declType->is_nullable);
 
         t->type = declType->type;
-        printf("DEBUG: Array declaration '%s' type %s\n",
-               varId->leaf->text, typename(t->type));
         return;
     }
 
@@ -266,10 +233,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 t->kids[0]->type = t->type;
             t->kids[0]->is_mutable = t->is_mutable;
             t->kids[0]->is_nullable = t->is_nullable;
-            // printf("DEBUG: Propagated declaration info: identifier '%s' gets type %s, mutable=%d, nullable=%d\n",
-            //        t->kids[0]->leaf ? t->kids[0]->leaf->text : "unknown",
-            //        t->type ? typename(t->type) : "none",
-            //        t->is_mutable, t->is_nullable);
         }
     }
     
@@ -285,20 +248,13 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
                 t->type = entry->type;
                 t->is_mutable = entry->mutable;
                 t->is_nullable = entry->nullable;
-                // printf("DEBUG: Resolved Identifier '%s' to type %s, mutable=%d, nullable=%d\n",
-                //        idText, typename(entry->type), entry->mutable, entry->nullable);
             }
         }
     }
-
-    // printf("DEBUG: Entering node: %s (prod: %d) at line %d, scope: %p\n", 
-    //        t->symbolname ? t->symbolname : "NULL", t->prodrule, t->lineno, current_scope);
     
     if (t->symbolname && 
     (strcmp(t->symbolname, "forStatementKotlinRange") == 0 || 
         strcmp(t->symbolname, "forStatementKotlinRangeUntil") == 0)) {
-    
-        // printf("DEBUG: For loop encountered at line %d. Creating new scope for loop variable.\n", t->lineno);
         
         SymbolTable loop_scope = create_function_scope(current_scope, "forLoop");
         t->scope = loop_scope;
@@ -307,17 +263,14 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             char *loopVarName = t->kids[0]->leaf->text;
             insert_symbol(loop_scope, loopVarName, VARIABLE, integer_typeptr, 0, 0);
             t->kids[0]->type = integer_typeptr;
-            t->kids[0]->is_mutable = 0; // You can mark it immutable if desired.
-            // printf("DEBUG: Loop variable '%s' inserted with type int in new scope %p.\n", loopVarName, loop_scope);
+            t->kids[0]->is_mutable = 0;
         }
         
         current_scope = loop_scope;
     }
 
     if (t->prodrule == 327 && t->scope != NULL) {
-        // printf("DEBUG: Function declaration encountered. Updating current scope.\n");
         if (t->kids[0] && t->kids[0]->leaf)
-            // printf("DEBUG: Function '%s' has scope pointer: %p\n", t->kids[0]->leaf->text, t->scope);
         current_scope = t->scope;
     }
     
@@ -555,14 +508,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
             
             lhs->is_mutable = arrayVar->is_mutable;
         }
-
-        // printf("DEBUG: Final LHS state: token='%s', mutable=%d, type pointer=%p, basetype=%d (%s), lineno=%d\n",
-        //        (lhs->leaf && lhs->leaf->text) ? lhs->leaf->text : "unknown",
-        //        lhs->is_mutable,
-        //        lhs->type,
-        //        lhs->type ? lhs->type->basetype : -1,
-        //        lhs->type ? typename(lhs->type) : "none",
-        //        lhs->lineno);
     
         if (lhs->symbolname
             && strcmp(lhs->symbolname, "Identifier") == 0)
@@ -617,14 +562,6 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         typeptr left = t->kids[0]->type;
         typeptr right = t->kids[1]->type;
         int prod = t->prodrule;
-
-        // fprintf(stderr,
-        //     "DEBUG[op=%d,line=%d]: left=%s(%d), right=%s(%d)\n",
-        //     prod,
-        //     t->lineno,
-        //     left  ? typename(left)  : "NULL",  left  ? left->basetype  : -1,
-        //     right ? typename(right) : "NULL",  right ? right->basetype : -1
-        // );
         
         if (prod == ADD || prod == SUB) {
             if (prod == ADD && (check_type_compatibility(left, string_typeptr) ||

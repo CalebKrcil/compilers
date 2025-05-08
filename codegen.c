@@ -11,7 +11,7 @@
 #include "symtab.h"
 
 #define NULL_ADDR ((struct addr){R_NONE, {.offset = 0}})
-#define DEBUG_OUTPUT 1  // Set to 1 to enable debug output, 0 to disable
+#define DEBUG_OUTPUT 0  // Set to 1 to enable debug output, 0 to disable
  
 extern SymbolTable currentFunctionSymtab;
 extern SymbolTable globalSymtab;
@@ -138,56 +138,56 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
  
 
  void write_ic_file(const char *input_filename, struct instr *code) {
-     if (!input_filename) {
-         fprintf(stderr, "ERROR: NULL input filename provided to write_ic_file\n");
-         return;
-     }
-     
-     char output_filename[256];
-     generate_output_filename(input_filename, output_filename, sizeof(output_filename));
-     
-     FILE *f = fopen(output_filename, "w");
-     if (!f) {
-         fprintf(stderr, "ERROR: Could not open output file %s for writing\n", output_filename);
-         return;
-     }
-     
-     debug_print("DEBUG: Writing intermediate code to file %s\n", output_filename);
-     printf("Intermediate code will be written to %s\n", output_filename);
-     
-     fprintf(f, ".string\n");
-    for (int i = 0; i < strcount; i++) {
-        fprintf(f, "%s\t\"%s\"\n", strtab[i].label, strtab[i].text);
+    if (!input_filename) {
+        fprintf(stderr, "ERROR: NULL input filename provided to write_ic_file\n");
+        return;
     }
-     
-     fprintf(f, ".data\n");
-     fprintf(f, "/* global variable declarations */\n\n");
-     
-     fprintf(f, ".code\n");
-     
-     if (code == NULL) {
-         debug_print("DEBUG: write_ic_file: TAC code list is NULL!\n");
-         fprintf(f, "/* No code generated */\n");
-     } else {
-         struct instr *curr = code;
-         int instrCount = 0;
-         while (curr != NULL) {
-             debug_print("DEBUG: Writing instruction %d at address %p\n", instrCount, (void *)curr);
-             output_instruction(f, curr);
-             curr = curr->next;
-             instrCount++;
-         }
-         if (instrCount == 0) {
-             fprintf(f, "/* No instructions generated */\n");
-         }
-         debug_print("DEBUG: Finished writing %d instructions to %s\n", instrCount, output_filename);
-     }
-     
-     fclose(f);
- }
+    
+    char output_filename[256];
+    generate_output_filename(input_filename, output_filename, sizeof(output_filename));
+    
+    FILE *f = fopen(output_filename, "w");
+    if (!f) {
+        fprintf(stderr, "ERROR: Could not open output file %s for writing\n", output_filename);
+        return;
+    }
+    
+    debug_print("DEBUG: Writing intermediate code to file %s\n", output_filename);
+    printf("Intermediate code will be written to %s\n", output_filename);
+    
+    fprintf(f, ".string\n");
+for (int i = 0; i < strcount; i++) {
+    fprintf(f, "%s\t\"%s\"\n", strtab[i].label, strtab[i].text);
+}
+    
+    fprintf(f, ".data\n");
+    fprintf(f, "/* global variable declarations */\n\n");
+    
+    fprintf(f, ".code\n");
+    
+    if (code == NULL) {
+        debug_print("DEBUG: write_ic_file: TAC code list is NULL!\n");
+        fprintf(f, "/* No code generated */\n");
+    } else {
+        struct instr *curr = code;
+        int instrCount = 0;
+        while (curr != NULL) {
+            debug_print("DEBUG: Writing instruction %d at address %p\n", instrCount, (void *)curr);
+            output_instruction(f, curr);
+            curr = curr->next;
+            instrCount++;
+        }
+        if (instrCount == 0) {
+            fprintf(f, "/* No instructions generated */\n");
+        }
+        debug_print("DEBUG: Finished writing %d instructions to %s\n", instrCount, output_filename);
+    }
+    
+    fclose(f);
+}
  
 
- void generate_code(struct tree *t) {
+void generate_code(struct tree *t) {
     if (!t) return;
 
     t->returned = 0;
@@ -198,16 +198,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
     if (t->symbolname && strcmp(t->symbolname, "postIncrement") == 0 && t->nkids == 1) {
         struct tree *varNode = t->kids[0];
-        /* generate code for the variable access */
         generate_code(varNode);
-        /* save the original value into a temp (postfix result) */
         struct addr oldval = new_temp();
         struct instr *code = gen(O_ASN, oldval, varNode->place, NULL_ADDR);
-        /* prepare constant 1 */
         struct addr one = { .region = R_IMMED, .u.offset = 1 };
-        /* increment variable in place */
         code = concat(code, gen(O_IADD, varNode->place, varNode->place, one));
-        /* stitch together and set result */
         t->code  = concat(varNode->code, code);
         t->place = oldval;
         return;
@@ -215,15 +210,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     
     if (t->symbolname && strcmp(t->symbolname, "postDecrement") == 0 && t->nkids == 1) {
         struct tree *varNode = t->kids[0];
-        /* generate code for LHS */
         generate_code(varNode);
-        /* save old value in temp */
         struct addr oldval = new_temp();
         struct instr *code = gen(O_ASN, oldval, varNode->place, NULL_ADDR);
-        /* decrement LHS */
         struct addr one = { .region = R_IMMED, .u.offset = 1 };
         code = concat(code, gen(O_ISUB, varNode->place, varNode->place, one));
-        /* finalize */
         t->code = concat(varNode->code, code);
         t->place = oldval;
         return;
@@ -234,7 +225,7 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         generate_code(t->kids[0]);
         t->place = t->kids[0]->place;
         t->code  = t->kids[0]->code;
-        t->type  = t->kids[0]->type;    // <<< propagate the child’s type
+        t->type  = t->kids[0]->type;
         return;
     }
 
@@ -245,12 +236,10 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
     } else {
         debug_print("Interior node with %d kids\n", t->nkids);
     }
-    /*literals & identifiers*/
+
     if (t->leaf) {
-        // printf("Category: %d\n", t->leaf->category);
         switch (t->leaf->category) {
             case IntegerLiteral: {
-                // mark this node as an integer
                 t->type  = integer_typeptr;
                 t->place = new_temp();
                 struct addr imm = { .region = R_IMMED,
@@ -321,7 +310,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             
             case BooleanLiteral: {
-                // printf("boolean literal\n");
                 t->place = new_temp();
                 int val = strcmp(t->leaf->text,"true")==0 ? 1 : 0;
                 struct addr imm = { .region = R_IMMED, .u.offset = val };
@@ -333,9 +321,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             case Identifier: {
-                // fprintf(stderr,
-                //     "DEBUG: Identifier node: text=\"%s\"\n",
-                //     t->leaf->text);
                 SymbolTableEntry e = lookup_symbol(currentFunctionSymtab, t->leaf->text);
                 if (e) {
                     t->place = e->location;
@@ -358,21 +343,15 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         }
     }
 
-    /*Special‑cases*/
     if (t->symbolname) {
-        /*variableDeclaration */
-        // fprintf(stderr,"NODE: symbolname=%s, prodrule=%d\n",
-        //     t->symbolname? t->symbolname:"(null)",
-        //     t->prodrule);
 
         if (strcmp(t->symbolname, "arrayAssignmentDeclaration")==0) {
             struct tree *varId    = t->kids[0];
             struct tree *typeNode = t->kids[1];
-            struct tree *initTree = t->kids[4];        // “{ size, init }”
+            struct tree *initTree = t->kids[4];
             struct tree *sizeExpr = initTree->kids[0];
             struct tree *initExpr = initTree->kids[1];
         
-            /* 1) size*4 → totalBytes */
             generate_code(sizeExpr);
             struct addr bytesPer   = { .region = R_IMMED, .u.offset = 4 };
             struct addr totalBytes = new_temp();
@@ -382,7 +361,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                                          bytesPer);
             code = concat(sizeExpr->code, code);
         
-            /* 2) malloc into a fresh temp, mark it as pointer */
             struct addr basePtr = new_temp();
             struct instr *m = gen(O_MALLOC,
                                   basePtr,
@@ -391,7 +369,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             m->is_ptr = 1;
             code = concat(code, m);
         
-            /* 3) copy that temp into the real ‘a’ slot, mark it as pointer */
             SymbolTableEntry entry =
                 lookup_symbol(currentFunctionSymtab, varId->leaf->text);
             struct instr *copyPtr = gen(O_ASN,
@@ -401,7 +378,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             copyPtr->is_ptr = 1;
             code = concat(code, copyPtr);
         
-            /* 4) the zero-init loop (exactly as you already have it) */
             struct addr idx = new_temp();
             code = concat(code,
                           gen(O_ASN,
@@ -417,12 +393,10 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                               NULL_ADDR,
                               NULL_ADDR));
         
-            /* if (i>=size) goto exit */
             struct addr cmp = new_temp();
             code = concat(code, gen(O_IGE, cmp, idx, sizeExpr->place));
             code = concat(code, gen(O_BNZ, *lblExit, cmp, NULL_ADDR));
         
-            /* eltAddr = a + i*4 */
             struct addr off = new_temp();
             code = concat(code,
                           gen(O_IMUL, off, idx, bytesPer));
@@ -430,13 +404,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             {
               struct instr *addPtr = gen(O_IADD,
                                          eltAddr,
-                                         entry->location, /* still ‘a’ */
+                                         entry->location,
                                          off);
               addPtr->is_ptr = 1;
               code = concat(code, addPtr);
             }
         
-            /* evaluate initExpr, store into [eltAddr] */
             generate_code(initExpr);
             code = concat(code, initExpr->code);
             code = concat(code,
@@ -446,7 +419,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                               initExpr->place,
                               NULL_ADDR));
         
-            /* i = i + 1; goto top */
             code = concat(code,
                           gen(O_IADD,
                               idx,
@@ -455,7 +427,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             code = concat(code,
                           gen(O_BR, *lblTop, NULL_ADDR, NULL_ADDR));
         
-            /* exit: */
             code = concat(code,
                           gen(D_LABEL, *lblExit, NULL_ADDR, NULL_ADDR));
         
@@ -470,7 +441,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct tree *arr = t->kids[0];
             struct tree *idx = t->kids[1];
         
-            // 1) load the array pointer from its local slot into a temp
             generate_code(arr);
             struct addr ptrVal = new_temp();
             struct instr *ldPtr = gen(O_ASN,
@@ -480,20 +450,16 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             ldPtr->is_ptr = 1;
             struct instr *code = concat(arr->code, ldPtr);
         
-            // 2) compute the index
             generate_code(idx);
             code = concat(code, idx->code);
         
-            // 3) fixed element size = 4 bytes
             t->type = arr->type->u.a.elemtype;
             struct addr bytesPer = { .region = R_IMMED, .u.offset = 4 };
         
-            // 4) offset = idx * 4
             struct addr offset = new_temp();
             code = concat(code,
                           gen(O_IMUL, offset, idx->place, bytesPer));
         
-            // 5) addrTemp = ptrVal + offset
             struct addr addrTemp = new_temp();
             struct instr *addPtr = gen(O_IADD,
                                        addrTemp,
@@ -502,7 +468,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             addPtr->is_ptr = 1;
             code = concat(code, addPtr);
         
-            // 6) load the 32-bit element from memory into a new temp
             t->place = new_temp();
             struct instr *loadElem = gen(O_ASN,
                                         t->place,
@@ -518,10 +483,9 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         if (strcmp(t->symbolname, "arrayDeclaration")==0) {
             struct tree *varId    = t->kids[0];
             struct tree *typeNode = t->kids[1];
-            struct tree *initTree = t->kids[2];        // “(size) { 0 }”
+            struct tree *initTree = t->kids[2];
             struct tree *sizeExpr = initTree->kids[0];
         
-            /* 1) size*4 → totalBytes */
             generate_code(sizeExpr);
             struct addr bytesPer   = { .region = R_IMMED, .u.offset = 4 };
             struct addr totalBytes = new_temp();
@@ -531,7 +495,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                                          bytesPer);
             code = concat(sizeExpr->code, code);
         
-            /* 2) malloc into temp, mark pointer */
             struct addr basePtr = new_temp();
             struct instr *m = gen(O_MALLOC,
                                   basePtr,
@@ -540,7 +503,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             m->is_ptr = 1;
             code = concat(code, m);
         
-            /* 3) copy temp → a’s slot, mark pointer */
             SymbolTableEntry entry =
                 lookup_symbol(currentFunctionSymtab, varId->leaf->text);
             struct instr *copyPtr = gen(O_ASN,
@@ -550,7 +512,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             copyPtr->is_ptr = 1;
             code = concat(code, copyPtr);
         
-            /* 4) zero-init loop */
             struct addr idx = new_temp();
             code = concat(code,
                           gen(O_ASN,
@@ -566,12 +527,10 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                               NULL_ADDR,
                               NULL_ADDR));
         
-            /* if (i>=size) goto exit */
             struct addr cmp = new_temp();
             code = concat(code, gen(O_IGE, cmp, idx, sizeExpr->place));
             code = concat(code, gen(O_BNZ, *lblExit, cmp, NULL_ADDR));
         
-            /* eltAddr = a + i*4 */
             struct addr off = new_temp();
             code = concat(code,
                           gen(O_IMUL, off, idx, bytesPer));
@@ -585,7 +544,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
               code = concat(code, addPtr);
             }
         
-            /* store 0 into [eltAddr] */
             code = concat(code,
                           gen(O_ASN,
                               (struct addr){ .region=R_MEM,
@@ -593,7 +551,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                               (struct addr){ .region=R_IMMED, .u.offset=0 },
                               NULL_ADDR));
         
-            /* i = i + 1; goto top */
             code = concat(code,
                           gen(O_IADD,
                               idx,
@@ -602,7 +559,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             code = concat(code,
                           gen(O_BR, *lblTop, NULL_ADDR, NULL_ADDR));
         
-            /* exit: */
             code = concat(code,
                           gen(D_LABEL, *lblExit, NULL_ADDR, NULL_ADDR));
         
@@ -612,17 +568,13 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /* --- 3) Array write: a[i] = rhs --- */
-        if (strcmp(t->symbolname, "assignment")==0
-        && t->kids[0]
-        && strcmp(t->kids[0]->symbolname, "arrayAccess")==0)
+        if (strcmp(t->symbolname, "assignment")==0 && t->kids[0] && strcmp(t->kids[0]->symbolname, "arrayAccess")==0)
         {
             struct tree *access = t->kids[0];
             struct tree *arr    = access->kids[0];
             struct tree *idx    = access->kids[1];
             struct tree *rhs    = t->kids[1];
 
-            /* 1) load ‘a’ pointer */
             generate_code(arr);
             struct addr ptrVal = new_temp();
             struct instr *ldPtr = gen(
@@ -633,21 +585,17 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             ldPtr->is_ptr = 1;
             struct instr *code = concat(arr->code, ldPtr);
 
-            /* 2) index and RHS */
             generate_code(idx);
             code = concat(code, idx->code);
             generate_code(rhs);
 
-            /* 3) element size = 4 */
             t->type = rhs->type;
             struct addr bytesPer = { .region = R_IMMED, .u.offset = 4 };
 
-            /* 4) offset = idx * 4 */
             struct addr offset = new_temp();
             code = concat(code,
                 gen(O_IMUL, offset, idx->place, bytesPer));
 
-            /* 5) eltAddr = ptrVal + offset */
             struct addr addrTemp = new_temp();
             struct instr *addPtr = gen(
                 O_IADD,
@@ -657,7 +605,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             addPtr->is_ptr = 1;
             code = concat(code, addPtr);
 
-            /* 6) store rhs into [eltAddr] */
             struct instr *storeElem = gen(
                 O_ASN,
                 (struct addr){ .region=R_MEM,
@@ -666,14 +613,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 NULL_ADDR);
             code = concat(code, storeElem);
 
-            /* done */
             t->code  = concat(concat(arr->code, rhs->code), code);
             t->place = rhs->place;
             t->type  = rhs->type;
             return;
         }
 
-        /*assignment*/
         if (strcmp(t->symbolname, "assignment")==0 && t->nkids == 2) {
             struct tree *lhs = t->kids[0]; 
             struct tree *rhs = t->kids[1];
@@ -702,15 +647,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             
             t->place = lhs->place;
             t->type  = rhs->type;
-            /* emit an ASN and tag it if this is a double assignment */
             struct instr *asn = gen(O_ASN,
                             lhs->place,
                             rhs->place,
                             NULL_ADDR);
-            SymbolTableEntry entry =
-            lookup_symbol(currentFunctionSymtab,
-                            lhs->leaf->text);
-            // force 8‐byte store if the variable is declared Double
+            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, lhs->leaf->text);
             asn->is_double = (entry && entry->type == double_typeptr) ? 1 : 0;
             asn->is_ptr = (entry && entry->type == string_typeptr) ? 1 : 0;
             debug_print("CODEGEN ASN to '%s': dest=%s:%d  src=%s:%d  is_double=%d\n",
@@ -730,7 +671,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         else if (strcmp(t->symbolname, "additive_expression")==0 && t->nkids==2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
-            /* infer result type from kids */
             int isD = (t->kids[0]->type==double_typeptr
                      || t->kids[1]->type==double_typeptr);
             t->type = isD ? double_typeptr : integer_typeptr;
@@ -750,36 +690,27 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /*multiplicative_expression*/
-        else if (strcmp(t->symbolname, "multiplicative_expression") == 0
-            && t->nkids == 2) {
-            // 1) generate code for left and right subexpressions
+        else if (strcmp(t->symbolname, "multiplicative_expression") == 0 && t->nkids == 2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
 
-            // 2) infer result type: double if either operand is double
             int isD = (t->kids[0]->type == double_typeptr
                     || t->kids[1]->type == double_typeptr);
             t->type  = isD ? double_typeptr : integer_typeptr;
 
-            // 3) pick the right opcode
             int opcode;
             if (isD) {
-                // Double * or / (or modulo, if you implement it)
                 if      (t->prodrule == MULT) opcode = O_DMUL;
                 else if (t->prodrule == DIV ) opcode = O_DDIV;
                 else                          opcode = O_DMOD;
             } else {
-                // Int * or / or %
                 if      (t->prodrule == MULT) opcode = O_IMUL;
                 else if (t->prodrule == DIV ) opcode = O_IDIV;
                 else                          opcode = O_IMOD;
             }
 
-            // 4) allocate a result temp
             t->place = new_temp();
 
-            // 5) chain the instructions: [ left code ] ; [ right code ] ; OPCODE result, left, right
             t->code = concat(
                 concat(t->kids[0]->code, t->kids[1]->code),
                 gen(opcode,
@@ -792,7 +723,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
         
 
 
-        /*comparison*/
         else if (strcmp(t->symbolname, "comparison")==0 && t->nkids==2) {
             generate_code(t->kids[0]);
             generate_code(t->kids[1]);
@@ -818,7 +748,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /*unary negation*/
         else if (strcmp(t->symbolname, "negation")==0 && t->nkids>=1) {
             generate_code(t->kids[0]);
             t->place = new_temp();
@@ -829,7 +758,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
 
-        /*logical_not*/
         else if (strcmp(t->symbolname, "logical_not")==0 && t->nkids>=1) {
             generate_code(t->kids[0]);
             t->place = new_temp();
@@ -880,7 +808,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /*if statement*/
         else if (strcmp(t->symbolname, "ifStatement") == 0 && t->nkids == 2) {
             struct tree *cond = t->kids[0];
             struct tree *then_stmt = t->kids[1];
@@ -902,7 +829,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         else if (strcmp(t->symbolname, "ifElseStatement") == 0 && t->nkids == 3) {
-            // printf("DEBUG: Entering ifElseStatement\n");
 
             struct tree *cond = t->kids[0];
             struct tree *then_branch = t->kids[1];
@@ -931,7 +857,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /*logical_and expression*/
         else if (strcmp(t->symbolname, "logical_and") == 0 && t->nkids == 2) {
             t->place = new_temp();
             
@@ -970,7 +895,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }
         
-        /*logical_or expression*/
         else if (strcmp(t->symbolname, "logical_or") == 0 && t->nkids == 2) {
             t->place = new_temp();
             
@@ -1057,7 +981,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             struct addr tmp = new_temp();
         
             const char *op = t->leaf ? t->leaf->text : NULL;
-            // printf("Equality operator: [%s]\n", op ? op : "NULL");
                     
             if (op) {
                 if (strcmp(op, "==") == 0 || strcmp(op, "===") == 0)
@@ -1075,12 +998,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->type  = boolean_typeptr;
             return;
         }       
-        /*function Calls*/
+
         else if (strcmp(t->symbolname, "functionCall") == 0) {
             struct tree *fnNode = t->kids[0];
             const char *methodName = fnNode->leaf->text;
         
-            // 1) Check for builtin math functions
             struct instr *code = NULL;
             struct tree **args = NULL;
             int argc = 0;
@@ -1157,16 +1079,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 return;
             }
             
-            
-            
-        
-            // 2) Look up symbol
             SymbolTableEntry fentry =
                 lookup_symbol(globalSymtab, (char *)methodName);
             if (!fentry)
                 fentry = lookup_symbol(currentFunctionSymtab, (char *)methodName);
         
-            // 3) Generate code for args + PARMs
             for (int i = 0; i < argc; i++) {
                 generate_code(args[i]);
                 code = concat(code, args[i]->code);
@@ -1177,7 +1094,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             }
             free(args);
         
-            // 4) CALL instruction
             struct addr nameAddr = {
                 .region = R_NAME,
                 .u.name = strdup(fentry->s)
@@ -1201,29 +1117,21 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             return;
         }   
 
-        /*functionDeclaration */
         else if (strcmp(t->symbolname, "functionDeclaration") == 0) {
-            // 0) save old function scope
             SymbolTable oldSymtab = currentFunctionSymtab;
-        
-            // 1) get name and fresh label
             char *funcName = t->kids[0]->leaf->text;
             struct addr label_addr = *genlabel();
         
-            // 2) update the global symbol table entry
             SymbolTableEntry fentry = lookup_symbol(globalSymtab, funcName);
             if (fentry) fentry->location = label_addr;
         
-            // 3) emit .globl/.type/@function
             struct addr name_addr = { .region = R_NAME, .u.name = strdup(funcName) };
             t->code = gen(D_GLOB,  name_addr, NULL_ADDR, NULL_ADDR);
             t->code = concat(t->code,
                              gen(D_PROC, label_addr, name_addr, NULL_ADDR));
         
-            // 4) switch into this function’s symbol table
             if (t->scope) currentFunctionSymtab = t->scope;
         
-            // 5) emit a placeholder O_ALLOC; we’ll patch its size below
             struct instr *allocInstr = gen(
                 O_ALLOC,
                 NULL_ADDR,
@@ -1233,7 +1141,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             );
             t->code = concat(t->code, allocInstr);
         
-            // 6) copy incoming parameters into their locals
             {
                 struct tree **params = NULL;
                 int paramCount = 0;
@@ -1251,7 +1158,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 free(params);
             }
         
-            // 7) generate the function body
             struct tree *body = NULL;
             for (int i = 0; i < t->nkids; i++) {
                 if (t->kids[i] && strcmp(t->kids[i]->symbolname, "block") == 0) {
@@ -1264,7 +1170,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 t->code = concat(t->code, body->code);
             }
         
-            // 8) scan the *built* code list for highest local offset
             int maxOffset = currentFunctionSymtab->nextOffset;
             for (struct instr *ip = t->code; ip; ip = ip->next) {
                 if (ip->dest.region == R_LOCAL && ip->dest.u.offset > maxOffset)
@@ -1274,10 +1179,8 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 if (ip->src2.region == R_LOCAL && ip->src2.u.offset > maxOffset)
                     maxOffset = ip->src2.u.offset;
             }
-            // round up to 16 bytes
             int frameSize = ((maxOffset + 15) / 16) * 16;
         
-            // patch the *actual* O_ALLOC in our t->code
             for (struct instr *ip = t->code; ip; ip = ip->next) {
                 if (ip->opcode == O_ALLOC) {
                     ip->src1.u.offset = frameSize;
@@ -1285,7 +1188,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 }
             }
         
-            // 9) if no explicit RET at end, append dealloc + RET using frameSize
             {
                 struct instr *last = t->code;
                 while (last && last->next) last = last->next;
@@ -1301,18 +1203,15 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 }
             }
         
-            // 10) finish up: .LFE / .size
             t->code = concat(t->code,
                              gen(D_END, label_addr, name_addr, NULL_ADDR));
         
-            // 11) restore old function scope
             currentFunctionSymtab = oldSymtab;
             return;
         }
         
         
     
-       /*return Statement*/
         else if (strcmp(t->symbolname, "returnStatement") == 0 && t->nkids == 1) {
             int frameSize = currentFunctionSymtab->nextOffset;
             if (frameSize == 0) frameSize = 8;
@@ -1343,12 +1242,9 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                   strcmp(t->symbolname, "constVariableDeclaration") == 0)
                  && t->nkids >= 3)
         {
-                // var <name> : <type> = <initializer>
                 struct tree *idNode   = t->kids[0];
-                // struct tree *typeNode = t->kids[1];
                 struct tree *init     = t->kids[2];
             
-                // look up the stack slot
                 SymbolTableEntry entry =
                   lookup_symbol(currentFunctionSymtab, idNode->leaf->text);
                 if (!entry) {
@@ -1359,17 +1255,14 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                 }
                 struct addr var_loc = entry->location;
             
-                // codegen the initializer
                 generate_code(init);
             
-                // emit the store (8-byte if a double)
                 struct instr *asn = gen(
                     O_ASN,
-                    entry->location,  // dest = declared slot
-                    init->place,      // src  = initializer result
+                    entry->location,
+                    init->place,
                     NULL_ADDR
                 );
-                // tag by the declared type in the symbol table
                 asn->is_double = (entry->type == double_typeptr) ? 1 : 0;
                 asn->is_ptr = (entry->type == string_typeptr) ? 1 : 0;
                 debug_print("CODEGEN varDecl '%s': dest=%s:%d  init_place=%s:%d  is_double=%d\n",
@@ -1378,13 +1271,11 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
                     regionname(init->place.region), init->place.u.offset,
                     asn->is_double);
             
-                // chain and return
                 t->code  = concat(init->code, asn);
                 t->place = var_loc;
                 t->type  = init->type;
                 return;
             }       
-        /*for statement*/
         else if (strcmp(t->symbolname, "forStatementKotlinRange") == 0 && t->nkids == 4) {
             struct tree *loopVar = t->kids[0];     
             struct tree *startExpr = t->kids[1];   
@@ -1501,7 +1392,6 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             t->code = code;
             return;
         }
-        /*break statement*/
         else if (strcmp(t->symbolname, "breakStatement") == 0) {
             if (!current_break_label) {
                 fprintf(stderr, "ERROR: 'break' used outside of loop.\n");
@@ -1545,7 +1435,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
     FILE *f = fopen(outfn, "w");
     if (!f) { perror(outfn); return; }
 
-    // --- 1) file + .rodata ---
     fprintf(f, "\t.file\t\"%s\"\n", input_filename);
     fprintf(f, "\t.section\t.rodata\n\t.align\t8\n");
     for (int i = 0; i < strcount; i++) {
@@ -1561,7 +1450,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             dbltab[i].label,
             dbltab[i].val);
     }
-    // new format string for doubles
     fprintf(f,
         ".LCdouble_fmt:\n"
         "\t.string \"%%f\\n\"\n");
@@ -1570,14 +1458,12 @@ void write_asm_file(const char *input_filename, struct instr *code) {
         "\t.string \"%%d\\n\"\n");
     fprintf(f, "\t.text\n");
 
-    // --- 2) prepare argument‐passing tables ---
     const char *ireg[6] = { "%edi","%esi","%edx","%ecx","%r8d","%r9d" };
     const char *qreg[6] = { "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     const char *xmmreg[6] = {"%xmm0","%xmm1","%xmm2","%xmm3","%xmm4","%xmm5"};
     int argc = 0, args_off[6], args_is_ptr[6] = {0}, args_is_double[6] = {0};
     int args_region[6];
 
-    // track when we’re inside a function and its stack frame size
     int inFunction = 0;
     int frameSize  = 0;
 
@@ -1592,11 +1478,9 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 break;
 
             case D_PROC:
-                printf("DEBUG: D_PROC %s\n", cur->src1.u.name);
-                // start a new function
                 inFunction = 1;
                 argc       = 0;
-                frameSize  = 0;               // will be set by O_ALLOC next
+                frameSize  = 0;
             
                 fprintf(f,
                     "\t.type\t%s, @function\n"
@@ -1612,29 +1496,28 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     ,
                     cur->src1.u.name,
                     cur->src1.u.name,
-                    cur->dest.u.offset  // unique label#
+                    cur->dest.u.offset
                 );
                 break;
 
-          case D_LABEL:
-            // basic‐block label inside current function
-            fprintf(f, ".L%d:\n", cur->dest.u.offset);
-            break;
+            case D_LABEL:
+                // basic‐block label inside current function
+                fprintf(f, ".L%d:\n", cur->dest.u.offset);
+                break;
 
             case D_END:
                 fprintf(f,
-                    /* unwind the stack frame... */
-                    "\taddq\t$%d, %%rsp\n"         /* <— undo the initial subq */
+                    "\taddq\t$%d, %%rsp\n"
                     "\tleave\n"
                     "\t.cfi_def_cfa   7, 8\n"
                     "\t.cfi_endproc\n"
                     "\tret\n"
                     ".LFE%d:\n"
                     "\t.size\t%s, .-%s\n",
-                    frameSize,                    /* the same value you captured at O_ALLOC */
-                    cur->dest.u.offset,           /* label number */
-                    cur->src1.u.name,             /* function name */
-                    cur->src1.u.name              /* function name */
+                    frameSize,
+                    cur->dest.u.offset,
+                    cur->src1.u.name,
+                    cur->src1.u.name
                 );
                 inFunction = 0;
                 break;
@@ -1646,23 +1529,18 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     frameSize = cur->src1.u.offset;
                     fprintf(f, "\tsubq\t$%d, %%rsp\n", frameSize);
                 } else if (cur->src1.u.offset > 0) {
-                    // only emit non-zero
                     fprintf(f, "\tsubq\t$%d, %%rsp\n", cur->src1.u.offset);
                 }
                 break;
 
             case O_MALLOC: {
-                // src1 holds the byte‐count (in reg/immed), dest.u.offset is the local slot
                 if (cur->src1.region == R_IMMED) {
                     fprintf(f, "\tmovl\t$%d, %%edi\n", cur->src1.u.offset);
                 } else {
-                    // we assume locals live at -offset(%rbp)
                     fprintf(f, "\tmovl\t-%d(%%rbp), %%edi\n",
                             cur->src1.u.offset);
                 }
-                // actually call malloc
                 fprintf(f, "\tcall\tmalloc\n");
-                // save the returned pointer (in %rax) into the local slot
                 fprintf(f, "\tmovq\t%%rax, -%d(%%rbp)\n",
                         cur->dest.u.offset);
                 argc = 0;
@@ -1670,8 +1548,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             }
 
             case O_DEALLOC:
-                // ignore the dealloc at function‐end (handled in D_END),
-                // but handle any mid‐function deallocs
                 if (!inFunction) {
                     fprintf(f, "\taddq\t$%d, %%rsp\n",
                             cur->src1.u.offset);
@@ -1681,110 +1557,93 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             // ——————— PARAM / CALL ———————
 
             case O_PARM:
-                // record up to six args
                 if (argc < 6) {
                     args_off[argc]     = cur->src1.u.offset;
                     args_region[argc]  = cur->src1.region;
                     args_is_double[argc] = cur->is_double;
-                    // preserve “pointer” for globals *or* explicit is_ptr
                     args_is_ptr[argc]    = (cur->src1.region == R_GLOBAL)
                                           || cur->is_ptr;
                     argc++;
                 }
                 break;
 
-                case O_CALL: {
-                    /* special-case for println(x) */
-                    if (cur->src1.region == R_NAME
-                        && strcmp(cur->src1.u.name, "println") == 0
-                        && argc == 1) {
-                        if (args_is_ptr[0]) {
-                            // println(string)
-                            if (args_region[0] == R_GLOBAL) {
-                                // a literal
-                                fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n",
-                                        args_off[0]);
-                            } else {
-                                // a local/param variable
-                                fprintf(f, "\tmovq\t-%d(%%rbp), %%rdi\n",
-                                        args_off[0]);
-                            }
-                            fprintf(f, "\txor\t%%eax, %%eax\n");
-                        }
-                        else if (args_is_double[0]) {
-                            // println(double)
-                            fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
-                            fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
-                            // FULLY zero and then set EAX=1 so printf knows 1 XMM arg
-                            fprintf(f, "\tmovl\t$1, %%eax\n");
-                        }
-                        else {
-                            // println(int)
-                            fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
-                            fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
-                            // ZERO EAX for no XMM args
-                            fprintf(f, "\txor\t%%eax, %%eax\n");
-                        }
-                        fprintf(f, "\tcall\tprintf\n");
-                        argc = 0;
-                        break;
-                    }
-                
-                    /* otherwise, fall back to your existing up-to-six-arg logic */
-                    for (int i = 0; i < argc && i < 6; i++) {
-                        if (args_is_double[i]) {
-                            // Double argument -> XMM register
-                            fprintf(f,
-                                "\tmovsd\t-%d(%%rbp), %s\n",
-                                args_off[i],
-                                xmmreg[i]);
-                        }
-                        else if (args_is_ptr[i]) {
-                            if (args_region[i] == R_GLOBAL) {
-                                // a string literal in .rodata
-                                fprintf(f,
-                                    "\tleaq\t.LC%d(%%rip), %s\n",
-                                    args_off[i],
-                                    qreg[i]);
-                            } else {
-                                // a pointer-valued local or parameter
-                                fprintf(f,
-                                    "\tmovq\t-%d(%%rbp), %s\n",
-                                    args_off[i],
-                                    qreg[i]);
-                            }
-                        }
-                        else {
-                            // 32-bit integer
-                            fprintf(f,
-                                "\tmovl\t-%d(%%rbp), %s\n",
-                                args_off[i],
-                                ireg[i]);
-                        }
-                    }
-                    if (cur->src1.region == R_NAME) {
-                        fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
-                    } else {
-                        fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
-                    }
-                    /* store return value: movsd if double, movl if int */
-                    if (cur->dest.u.offset > 0) {
-                        if (cur->is_double) {
-                            fprintf(f,
-                                "\tmovsd\t%%xmm0, -%d(%%rbp)\n",
-                                cur->dest.u.offset);
+            case O_CALL: {
+                if (cur->src1.region == R_NAME
+                    && strcmp(cur->src1.u.name, "println") == 0
+                    && argc == 1) {
+                    if (args_is_ptr[0]) {
+                        if (args_region[0] == R_GLOBAL) {
+                            fprintf(f, "\tleaq\t.LC%d(%%rip), %%rdi\n",
+                                    args_off[0]);
                         } else {
-                            fprintf(f,
-                                "\tmovl\t%%eax, -%d(%%rbp)\n",
-                                cur->dest.u.offset);
+                            fprintf(f, "\tmovq\t-%d(%%rbp), %%rdi\n",
+                                    args_off[0]);
                         }
+                        fprintf(f, "\txor\t%%eax, %%eax\n");
                     }
+                    else if (args_is_double[0]) {
+                        fprintf(f, "\tleaq\t.LCdouble_fmt(%%rip), %%rdi\n");
+                        fprintf(f, "\tmovsd\t-%d(%%rbp), %%xmm0\n", args_off[0]);
+                        fprintf(f, "\tmovl\t$1, %%eax\n");
+                    }
+                    else {
+                        fprintf(f, "\tleaq\t.LCint_fmt(%%rip), %%rdi\n");
+                        fprintf(f, "\tmovl\t-%d(%%rbp), %%esi\n", args_off[0]);
+                        fprintf(f, "\txor\t%%eax, %%eax\n");
+                    }
+                    fprintf(f, "\tcall\tprintf\n");
                     argc = 0;
                     break;
-                }               
+                }
+                
+                for (int i = 0; i < argc && i < 6; i++) {
+                    if (args_is_double[i]) {
+                        fprintf(f,
+                            "\tmovsd\t-%d(%%rbp), %s\n",
+                            args_off[i],
+                            xmmreg[i]);
+                    }
+                    else if (args_is_ptr[i]) {
+                        if (args_region[i] == R_GLOBAL) {
+                            fprintf(f,
+                                "\tleaq\t.LC%d(%%rip), %s\n",
+                                args_off[i],
+                                qreg[i]);
+                        } else {
+                            fprintf(f,
+                                "\tmovq\t-%d(%%rbp), %s\n",
+                                args_off[i],
+                                qreg[i]);
+                        }
+                    }
+                    else {
+                        fprintf(f,
+                            "\tmovl\t-%d(%%rbp), %s\n",
+                            args_off[i],
+                            ireg[i]);
+                    }
+                }
+                if (cur->src1.region == R_NAME) {
+                    fprintf(f, "\tcall\t%s\n", cur->src1.u.name);
+                } else {
+                    fprintf(f, "\tcall\t.L%d\n", cur->src1.u.offset);
+                }
+                if (cur->dest.u.offset > 0) {
+                    if (cur->is_double) {
+                        fprintf(f,
+                            "\tmovsd\t%%xmm0, -%d(%%rbp)\n",
+                            cur->dest.u.offset);
+                    } else {
+                        fprintf(f,
+                            "\tmovl\t%%eax, -%d(%%rbp)\n",
+                            cur->dest.u.offset);
+                    }
+                }
+                argc = 0;
+                break;
+            }               
 
             case O_RET:
-                // load return value into %eax if present
                 if (cur->src1.region == R_IMMED) {
                     fprintf(f, "\tmovl\t$%d, %%eax\n",
                             cur->src1.u.offset);
@@ -1793,148 +1652,132 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                     fprintf(f, "\tmovl\t-%d(%%rbp), %%eax\n",
                             cur->src1.u.offset);
                 }
-                // fall through to function epilogue
                 break;
 
           // ———————— ARITHMETIC ————————
 
-          case O_ASN:
-          // --- array‐store into heap slot (dest.region==R_MEM) ---
-          if (cur->dest.region == R_MEM) {
-              // load the computed address
-              fprintf(f, "\tmovq\t-%d(%%rbp), %%rax\n",
-                      cur->dest.u.offset);
-              // store an immediate?
-              if (cur->src1.region == R_IMMED) {
-                  fprintf(f, "\tmovl\t$%d, (%%rax)\n",
-                          cur->src1.u.offset);
-              }
-              // store a parameter‐passed int?
-              else if (cur->src1.region == R_PARAM) {
-                  fprintf(f, "\tmovl\t%s, (%%rax)\n",
-                          ireg[cur->src1.u.offset]);
-              }
-              // store a local‐to‐heap int
-              else {
-                fprintf(f,
-                     "\tmovl\t-%d(%%rbp), %%ecx\n"
-                     "\tmovl\t%%ecx,(%%rax)\n",
-                     cur->src1.u.offset);
-              }
-              break;
-          }
+            case O_ASN:
+                if (cur->dest.region == R_MEM) {
+                    fprintf(f, "\tmovq\t-%d(%%rbp), %%rax\n",
+                            cur->dest.u.offset);
+                    if (cur->src1.region == R_IMMED) {
+                        fprintf(f, "\tmovl\t$%d, (%%rax)\n",
+                                cur->src1.u.offset);
+                    }
+                    else if (cur->src1.region == R_PARAM) {
+                        fprintf(f, "\tmovl\t%s, (%%rax)\n",
+                                ireg[cur->src1.u.offset]);
+                    }
+                    else {
+                        fprintf(f,
+                            "\tmovl\t-%d(%%rbp), %%ecx\n"
+                            "\tmovl\t%%ecx,(%%rax)\n",
+                            cur->src1.u.offset);
+                    }
+                    break;
+                }
       
-          // --- array‐load from heap slot (src1.region==R_MEM) ---
-          if (cur->src1.region == R_MEM && cur->dest.region == R_LOCAL) {
-              fprintf(f,
-                  "\tmovq\t-%d(%%rbp), %%rax\n"
-                  "\tmovl\t(%%rax), %%eax\n"
-                  "\tmovl\t%%eax, -%d(%%rbp)\n",
-                  cur->src1.u.offset,
-                  cur->dest.u.offset);
-              break;
-          }
-            if (cur->is_double) {
-                // 8-byte FP assignment: movsd [src]→xmm0; movsd xmm0→[dest]
-                if (cur->src1.region == R_PARAM) {
-                    // copy from XMM register into the local slot
+                if (cur->src1.region == R_MEM && cur->dest.region == R_LOCAL) {
                     fprintf(f,
-                        "\tmovsd\t%s, %d(%%rbp)\n",
-                        xmmreg[cur->src1.u.offset],
-                        -cur->dest.u.offset);
-                } else {
-                    // normal double copy via XMM0
-                    fprintf(f,
-                        "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                        "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                        -cur->src1.u.offset,
-                        -cur->dest.u.offset);
-                }
-            } else if (cur->is_ptr) {
-                // 1) load the 64-bit pointer:
-                if (cur->src1.region == R_GLOBAL) {
-                    // literal: lea .LCn, %rax; movq %rax, -offset(%rbp)
-                    fprintf(f,
-                        "\tleaq\t.LC%d(%%rip), %%rax\n"
-                        "\tmovq\t%%rax, %d(%%rbp)\n",
+                        "\tmovq\t-%d(%%rbp), %%rax\n"
+                        "\tmovl\t(%%rax), %%eax\n"
+                        "\tmovl\t%%eax, -%d(%%rbp)\n",
                         cur->src1.u.offset,
-                        -cur->dest.u.offset);
-                } else if (cur->src1.region == R_PARAM) {
-                    // parameter in %rdi/%rsi/…
-                    static const char *pr[] = {"%rdi","%rsi","%rdx","%rcx","%r8","%r9"};
-                    fprintf(f,
-                        "\tmovq\t%s, %d(%%rbp)\n",
-                        pr[cur->src1.u.offset],
-                        -cur->dest.u.offset);
-                } else {
-                    // local-to-local pointer move
-                    fprintf(f,
-                        "\tmovq\t%d(%%rbp), %%rax\n"
-                        "\tmovq\t%%rax, %d(%%rbp)\n",
-                        -cur->src1.u.offset,
-                        -cur->dest.u.offset);
+                        cur->dest.u.offset);
+                    break;
                 }
-            } else {
-                // existing 32-bit integer assignment path:
-                if (cur->src1.region == R_IMMED) {
-                    fprintf(f,
-                        "\tmovl\t$%d, %d(%%rbp)\n",
-                        cur->src1.u.offset,
-                        -cur->dest.u.offset);
-                } else if (cur->src1.region == R_PARAM) {
-                    static const char *p[6] = {"%edi","%esi","%edx","%ecx","%r8d","%r9d"};
-                    fprintf(f,
-                        "\tmovl\t%s, %d(%%rbp)\n",
-                        p[cur->src1.u.offset],
-                        -cur->dest.u.offset);
-                } else {
-                    fprintf(f,
-                        "\tmovl\t%d(%%rbp), %%eax\n"
-                        "\tmovl\t%%eax, %d(%%rbp)\n",
-                        -cur->src1.u.offset,
-                        -cur->dest.u.offset);
-                }
-            }
-          break;
+                    if (cur->is_double) {
+                        if (cur->src1.region == R_PARAM) {
+                            fprintf(f,
+                                "\tmovsd\t%s, %d(%%rbp)\n",
+                                xmmreg[cur->src1.u.offset],
+                                -cur->dest.u.offset);
+                        } else {
+                            fprintf(f,
+                                "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                                "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                                -cur->src1.u.offset,
+                                -cur->dest.u.offset);
+                        }
+                    } else if (cur->is_ptr) {
+                        if (cur->src1.region == R_GLOBAL) {
+                            fprintf(f,
+                                "\tleaq\t.LC%d(%%rip), %%rax\n"
+                                "\tmovq\t%%rax, %d(%%rbp)\n",
+                                cur->src1.u.offset,
+                                -cur->dest.u.offset);
+                        } else if (cur->src1.region == R_PARAM) {
+                            static const char *pr[] = {"%rdi","%rsi","%rdx","%rcx","%r8","%r9"};
+                            fprintf(f,
+                                "\tmovq\t%s, %d(%%rbp)\n",
+                                pr[cur->src1.u.offset],
+                                -cur->dest.u.offset);
+                        } else {
+                            fprintf(f,
+                                "\tmovq\t%d(%%rbp), %%rax\n"
+                                "\tmovq\t%%rax, %d(%%rbp)\n",
+                                -cur->src1.u.offset,
+                                -cur->dest.u.offset);
+                        }
+                    } else {
+                        if (cur->src1.region == R_IMMED) {
+                            fprintf(f,
+                                "\tmovl\t$%d, %d(%%rbp)\n",
+                                cur->src1.u.offset,
+                                -cur->dest.u.offset);
+                        } else if (cur->src1.region == R_PARAM) {
+                            static const char *p[6] = {"%edi","%esi","%edx","%ecx","%r8d","%r9d"};
+                            fprintf(f,
+                                "\tmovl\t%s, %d(%%rbp)\n",
+                                p[cur->src1.u.offset],
+                                -cur->dest.u.offset);
+                        } else {
+                            fprintf(f,
+                                "\tmovl\t%d(%%rbp), %%eax\n"
+                                "\tmovl\t%%eax, %d(%%rbp)\n",
+                                -cur->src1.u.offset,
+                                -cur->dest.u.offset);
+                        }
+                    }
+                break;
 
-          case O_ADDR:
-            fprintf(f,
-                "\tleaq\t%d(%%rbp), %%rax\n"
-                "\tmovq\t%%rax, %d(%%rbp)\n",
-                -cur->src1.u.offset,
-                -cur->dest.u.offset);
-            break;
+            case O_ADDR:
+                fprintf(f,
+                    "\tleaq\t%d(%%rbp), %%rax\n"
+                    "\tmovq\t%%rax, %d(%%rbp)\n",
+                    -cur->src1.u.offset,
+                    -cur->dest.u.offset);
+                break;
 
             case O_LCONT:
                 fprintf(f,
                     "\tmovsd\t.D%d(%%rip), %%xmm0\n"
                     "\tmovsd\t%%xmm0, %d(%%rbp)\n",
                     cur->src1.u.offset,
-                -cur->dest.u.offset);
+                    -cur->dest.u.offset);
                 break;
 
-          case O_SCONT:
-            fprintf(f,
-                "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                "\tmovsd\t%%xmm0, .LC%d(%%rip)\n",
-               -cur->src1.u.offset,
-                cur->dest.u.offset);
-            break;
+            case O_SCONT:
+                fprintf(f,
+                    "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                    "\tmovsd\t%%xmm0, .LC%d(%%rip)\n",
+                    -cur->src1.u.offset,
+                    cur->dest.u.offset);
+                break;
 
             case O_IADD:
                 if (cur->is_ptr) {
                     fprintf(f,
-                        "\tmovq\t-%d(%%rbp), %%rax\n"     // rax = basePtr
-                        "\tmovslq\t-%d(%%rbp), %%rcx\n"   // rcx = sign-extend 32-bit offset
-                        "\taddq\t%%rcx, %%rax\n"         // rax += rcx
-                        "\tmovq\t%%rax, -%d(%%rbp)\n",    // store result into addrTemp
-                        cur->src1.u.offset,              // basePtr slot
-                        cur->src2.u.offset,              // offsetBytes slot
-                        cur->dest.u.offset               // addrTemp slot
+                        "\tmovq\t-%d(%%rbp), %%rax\n"
+                        "\tmovslq\t-%d(%%rbp), %%rcx\n"
+                        "\taddq\t%%rcx, %%rax\n"
+                        "\tmovq\t%%rax, -%d(%%rbp)\n",
+                        cur->src1.u.offset,
+                        cur->src2.u.offset,
+                        cur->dest.u.offset
                     );
                 }
                 else if (cur->src2.region == R_IMMED) {
-                    // integer add with immediate
                     fprintf(f,
                         "\tmovl\t%d(%%rbp), %%eax\n"
                         "\taddl\t$%d, %%eax\n"
@@ -1944,7 +1787,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                         -cur->dest.u.offset
                     );
                 } else {
-                    // integer add two locals
                     fprintf(f,
                         "\tmovl\t%d(%%rbp), %%eax\n"
                         "\taddl\t%d(%%rbp), %%eax\n"
@@ -1958,17 +1800,15 @@ void write_asm_file(const char *input_filename, struct instr *code) {
         
         case O_ISUB:
             if (cur->src2.region == R_IMMED) {
-                // subtract a constant
                 fprintf(f,
                     "\tmovl\t%d(%%rbp), %%eax\n"
                     "\tsubl\t$%d, %%eax\n"
                     "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,    // load lhs
-                     cur->src2.u.offset,    // immediate constant
-                    -cur->dest.u.offset     // store result
+                    -cur->src1.u.offset,
+                     cur->src2.u.offset,
+                    -cur->dest.u.offset
                 );
             } else {
-                // subtract two stack slots
                 fprintf(f,
                     "\tmovl\t%d(%%rbp), %%eax\n"
                     "\tsubl\t%d(%%rbp), %%eax\n"
@@ -1983,17 +1823,15 @@ void write_asm_file(const char *input_filename, struct instr *code) {
 
             case O_IMUL:
                 if (cur->src2.region == R_IMMED) {
-                    // multiply a local by an immediate
                     fprintf(f,
-                        "\tmovl\t%d(%%rbp), %%eax\n"   // load src1
-                        "\timull\t$%d, %%eax\n"        // multiply by imm
-                        "\tmovl\t%%eax, %d(%%rbp)\n",  // store into dest
+                        "\tmovl\t%d(%%rbp), %%eax\n"
+                        "\timull\t$%d, %%eax\n"
+                        "\tmovl\t%%eax, %d(%%rbp)\n",
                         -cur->src1.u.offset,
                         cur->src2.u.offset,
                         -cur->dest.u.offset
                     );
                 } else {
-                    // multiply two locals
                     fprintf(f,
                         "\tmovl\t%d(%%rbp), %%eax\n"
                         "\timull\t%d(%%rbp), %%eax\n"
@@ -2115,7 +1953,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
           }
 
           case O_LBL:
-            // inline labels generated by array‐init loops, etc.
             fprintf(f, ".L%d:\n", cur->dest.u.offset);
             break;
 
@@ -2165,10 +2002,6 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 cur->dest.u.offset);
             break;
           }
-
-        //   case O_PUSH:
-        //     fprintf(f, "\tpushq\t%%rbp\n");
-        //     break;
 
           case O_POP:
             fprintf(f, "\tpopq\t%%rbp\n");

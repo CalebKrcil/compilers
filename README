@@ -1,0 +1,11 @@
+Compilers Final Code Gen HW7 Partner Participation:
+Gabe Turner: 2/2
+
+***Important
+If the test cases do not work with our compiler, we have provided a run_tests.sh script that
+will run some examples in a folder named "finaltests" all that needs to be done is to 
+chmod +x the script and run it in the base directory. There are some silly things that 
+our compiler does that are features, namely when printing you can only pass println a single
+string, int, or double, and they cannot be combined. Functions are also limited to 6 params
+because of assembly addresses.
+If there are other issues we will give a demo of all of the functionality our compiler has.

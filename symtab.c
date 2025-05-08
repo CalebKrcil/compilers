@@ -91,23 +91,11 @@ void insert_symbol(SymbolTable st, char *s, SymbolKind kind, typeptr type, int i
 
 SymbolTableEntry lookup_symbol(SymbolTable st, char *s) {
     if (!st) return NULL;
-    // fprintf(stderr,
-    //     "DEBUG[lookup_symbol] st=%p parent=%p nBuckets=%d tbl=%p looking for '%s'\n",
-    //     (void*)st,
-    //     (void*)(st ? st->parent : NULL),
-    //     st ? st->nBuckets : -1,
-    //     (void*)(st ? st->tbl : NULL),
-    //     s);
     
     int index = hash(st, s);
     SymbolTableEntry entry = st->tbl[index];
     while (entry) {
         if (strcmp(entry->s, s) == 0){
-            // char *type_str = (entry->type ? typename(entry->type) : "(none)");
-            // fprintf(stderr,
-            //     "DEBUG[lookup_symbol] hash index = %d type=%s\n",
-            //     index, 
-            //     type_str);
             return entry;
         }
         entry = entry->next;
@@ -128,7 +116,6 @@ SymbolTableEntry lookup_symbol_current_scope(SymbolTable st, char *s) {
 }
 
 void check_undeclared(SymbolTable st, char *s) {
-    // Array is a built-in type constructor, not a variable
     if (strcmp(s, "Array") == 0) 
         return;
 

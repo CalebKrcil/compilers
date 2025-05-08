@@ -1,6 +1,3 @@
-/*
- * Three Address Code - skeleton for CS 423
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include "tac.h"
@@ -44,10 +41,6 @@ struct addr new_temp(void) {
     temp.region = R_LOCAL;  
     temp.u.offset = currentFunctionSymtab->nextOffset;
     currentFunctionSymtab->nextOffset += 8;
-    // fprintf(stderr,
-    //     "DEBUG: new_temp() using local:%d  (nextOffset now %d)\n",
-    //     temp.u.offset,
-    //     currentFunctionSymtab->nextOffset);
     return temp;
 }
 
@@ -60,7 +53,6 @@ struct addr *genlabel(void)
    }
    a->region = R_LABEL;
    a->u.offset = labelcounter++;
-//    printf("generated a label %d\n", a->u.offset);
    return a;
 }
 
@@ -78,11 +70,6 @@ struct instr *gen(int op, struct addr a1, struct addr a2, struct addr a3)
   rv->next = NULL;
   rv->is_double = 0;
   rv->is_ptr = 0;
-//   fprintf(stderr, "DEBUG: gen -> %s %s:%d, %s:%d, %s:%d\n",
-//     opcodename(op),
-//     regionname(a1.region), a1.u.offset,
-//     regionname(a2.region), a2.u.offset,
-//     regionname(a3.region), a3.u.offset);
   return rv;
 }
 
@@ -110,7 +97,6 @@ struct instr *append(struct instr *l1, struct instr *l2)
 
 struct instr *concat(struct instr *l1, struct instr *l2)
 {
-    // fprintf(stderr, "DEBUG: concat lists %p and %p\n", l1, l2);
    return append(copylist(l1), l2);
 }
 

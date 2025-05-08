@@ -99,29 +99,19 @@ typeptr alcfunctype(struct tree * r, struct tree * p, SymbolTable st)
 */
 
 typeptr alcarraytype(struct tree *elemNode, struct tree *sizeNode) {
-   /* debug: entry */
-   printf("In alcarraytype\n");
-
-   /* allocate a fresh ARRAY_TYPE object */
    typeptr rv = alctype(ARRAY_TYPE);
    if (!rv) return NULL;
 
-   /* element type comes from the parser’s genericType node */
    rv->u.a.elemtype = elemNode->type;
 
-   /* if sizeNode is an integer literal, record it; otherwise leave unspecified */
    if (sizeNode
        && sizeNode->leaf
        && sizeNode->leaf->category == IntegerLiteral) {
        rv->u.a.size = sizeNode->leaf->value.ival;
    } else {
-       rv->u.a.size = -1;  /* “unspecified” */
+       rv->u.a.size = -1;
    }
 
-   /* debug: show what we got */
-   printf("alcarraytype: size=%d, elemtype=%s\n",
-          rv->u.a.size,
-          typename(rv->u.a.elemtype));
 
    return rv;
 }
