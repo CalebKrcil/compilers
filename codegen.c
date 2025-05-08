@@ -380,23 +380,19 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
             // 1c) allocate that many bytes
             struct addr basePtr = new_temp();
-            struct instr *parm = gen(O_PARM, NULL_ADDR, totalBytes, NULL_ADDR);
-            code = concat(code, parm);
-
-            //  —> call malloc, result in basePtr
-            struct addr mallocName = { .region = R_NAME,
-                                    .u.name   = strdup("malloc") };
-            code = concat(code,
-                        gen(O_MALLOC, basePtr, mallocName, NULL_ADDR));
+            code = concat(code, gen(O_MALLOC, basePtr, totalBytes, NULL_ADDR));
 
             // 1d) store the returned pointer into the variable slot
             SymbolTableEntry entry =
             lookup_symbol(currentFunctionSymtab, varId->leaf->text);
-            code = concat(code,
-                        gen(O_ASN,
-                            entry->location,
-                            basePtr,
-                            NULL_ADDR));
+            /* use a special ASN that we tag as “pointer” so write_asm emits movq */
+            struct instr *asn_ptr =
+            gen(O_ASN,
+                entry->location,  // dest = your variable slot (“a”)
+                basePtr,          // src1 = the malloc’ed pointer
+                NULL_ADDR);
+            asn_ptr->is_ptr = 1;       // force 64-bit MOVQ
+            code = concat(code, asn_ptr);
 
             /* (Optional) 1e) loop to initialize each element to initExpr:
             You can generate_code(initExpr) once, then emit a small
@@ -427,9 +423,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
 
             // 2c) compute address = basePtr + offset
             struct addr addrTemp = new_temp();
-            code = concat(code,
-                        gen(O_IADD, addrTemp,
-                            arr->place, offset));
+            struct instr *addInstr = gen(O_IADD,
+                                        addrTemp,
+                                        arr->place,  // pointer in R_LOCAL
+                                        offset);     // integer byte‐count
+            addInstr->is_ptr = 1;       // <<< mark as pointer‐add
+            code = concat(code, addInstr);
 
             // 2d) load from memory into a fresh temp
             t->place = new_temp();
@@ -466,9 +465,12 @@ static void format_operand(struct addr a, char *buf, size_t sz) {
             code = concat(idx->code, code);
 
             struct addr addrTemp = new_temp();
-            code = concat(code,
-                        gen(O_IADD, addrTemp,
-                            arr->place, offset));
+            struct instr *addInstr = gen(O_IADD,
+                                        addrTemp,
+                                        arr->place,
+                                        offset);
+            addInstr->is_ptr = 1;       // <<< pointer‐add here too
+            code = concat(code, addInstr);
 
             // 3c) store rhs into that memory location
             struct instr *store = gen(O_ASN,
@@ -1408,6 +1410,7 @@ void write_asm_file(const char *input_filename, struct instr *code) {
                 // save the returned pointer (in %rax) into the local slot
                 fprintf(f, "\tmovq\t%%rax, -%d(%%rbp)\n",
                         cur->dest.u.offset);
+                argc = 0;
                 break;
             }
 
@@ -1540,69 +1543,104 @@ void write_asm_file(const char *input_filename, struct instr *code) {
 
           // ———————— ARITHMETIC ————————
 
-            case O_ASN:
-                if (cur->is_double) {
-                    // 8-byte FP assignment: movsd [src]→xmm0; movsd xmm0→[dest]
-                    if (cur->src1.region == R_PARAM) {
-                        // copy from XMM register into the local slot
-                        fprintf(f,
-                            "\tmovsd\t%s, %d(%%rbp)\n",
-                            xmmreg[cur->src1.u.offset],
-                            -cur->dest.u.offset);
-                    } else {
-                        // normal double copy via XMM0
-                        fprintf(f,
-                            "\tmovsd\t%d(%%rbp), %%xmm0\n"
-                            "\tmovsd\t%%xmm0, %d(%%rbp)\n",
-                            -cur->src1.u.offset,
-                            -cur->dest.u.offset);
-                    }
-                } else if (cur->is_ptr) {
-                    // 1) load the 64-bit pointer:
-                    if (cur->src1.region == R_GLOBAL) {
-                        // literal: lea .LCn, %rax; movq %rax, -offset(%rbp)
-                        fprintf(f,
-                            "\tleaq\t.LC%d(%%rip), %%rax\n"
-                            "\tmovq\t%%rax, %d(%%rbp)\n",
-                            cur->src1.u.offset,
-                           -cur->dest.u.offset);
-                    } else if (cur->src1.region == R_PARAM) {
-                        // parameter in %rdi/%rsi/…
-                        static const char *pr[] = {"%rdi","%rsi","%rdx","%rcx","%r8","%r9"};
-                        fprintf(f,
-                            "\tmovq\t%s, %d(%%rbp)\n",
-                            pr[cur->src1.u.offset],
-                           -cur->dest.u.offset);
-                    } else {
-                        // local-to-local pointer move
-                        fprintf(f,
-                            "\tmovq\t%d(%%rbp), %%rax\n"
-                            "\tmovq\t%%rax, %d(%%rbp)\n",
-                           -cur->src1.u.offset,
-                           -cur->dest.u.offset);
-                    }
+          case O_ASN:
+          // --- array‐store into heap slot (dest.region==R_MEM) ---
+          if (cur->dest.region == R_MEM) {
+              // load the computed address
+              fprintf(f, "\tmovq\t-%d(%%rbp), %%rax\n",
+                      cur->dest.u.offset);
+              // store an immediate?
+              if (cur->src1.region == R_IMMED) {
+                  fprintf(f, "\tmovl\t$%d, (%%rax)\n",
+                          cur->src1.u.offset);
+              }
+              // store a parameter‐passed int?
+              else if (cur->src1.region == R_PARAM) {
+                  fprintf(f, "\tmovl\t%s, (%%rax)\n",
+                          ireg[cur->src1.u.offset]);
+              }
+              // store a local‐to‐heap int
+              else {
+                  fprintf(f,
+                      "\tmovl\t-%d(%%rbp), %%eax\n"
+                      "\tmovl\t%%eax, (%%rax)\n",
+                      cur->src1.u.offset);
+              }
+              break;
+          }
+      
+          // --- array‐load from heap slot (src1.region==R_MEM) ---
+          if (cur->src1.region == R_MEM && cur->dest.region == R_LOCAL) {
+              fprintf(f,
+                  "\tmovq\t-%d(%%rbp), %%rax\n"
+                  "\tmovl\t(%%rax), %%eax\n"
+                  "\tmovl\t%%eax, -%d(%%rbp)\n",
+                  cur->src1.u.offset,
+                  cur->dest.u.offset);
+              break;
+          }
+            if (cur->is_double) {
+                // 8-byte FP assignment: movsd [src]→xmm0; movsd xmm0→[dest]
+                if (cur->src1.region == R_PARAM) {
+                    // copy from XMM register into the local slot
+                    fprintf(f,
+                        "\tmovsd\t%s, %d(%%rbp)\n",
+                        xmmreg[cur->src1.u.offset],
+                        -cur->dest.u.offset);
                 } else {
-                    // existing 32-bit integer assignment path:
-                    if (cur->src1.region == R_IMMED) {
-                        fprintf(f,
-                            "\tmovl\t$%d, %d(%%rbp)\n",
-                            cur->src1.u.offset,
-                            -cur->dest.u.offset);
-                    } else if (cur->src1.region == R_PARAM) {
-                        static const char *p[6] = {"%edi","%esi","%edx","%ecx","%r8d","%r9d"};
-                        fprintf(f,
-                            "\tmovl\t%s, %d(%%rbp)\n",
-                            p[cur->src1.u.offset],
-                            -cur->dest.u.offset);
-                    } else {
-                        fprintf(f,
-                            "\tmovl\t%d(%%rbp), %%eax\n"
-                            "\tmovl\t%%eax, %d(%%rbp)\n",
-                            -cur->src1.u.offset,
-                            -cur->dest.u.offset);
-                    }
+                    // normal double copy via XMM0
+                    fprintf(f,
+                        "\tmovsd\t%d(%%rbp), %%xmm0\n"
+                        "\tmovsd\t%%xmm0, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        -cur->dest.u.offset);
                 }
-                break;
+            } else if (cur->is_ptr) {
+                // 1) load the 64-bit pointer:
+                if (cur->src1.region == R_GLOBAL) {
+                    // literal: lea .LCn, %rax; movq %rax, -offset(%rbp)
+                    fprintf(f,
+                        "\tleaq\t.LC%d(%%rip), %%rax\n"
+                        "\tmovq\t%%rax, %d(%%rbp)\n",
+                        cur->src1.u.offset,
+                        -cur->dest.u.offset);
+                } else if (cur->src1.region == R_PARAM) {
+                    // parameter in %rdi/%rsi/…
+                    static const char *pr[] = {"%rdi","%rsi","%rdx","%rcx","%r8","%r9"};
+                    fprintf(f,
+                        "\tmovq\t%s, %d(%%rbp)\n",
+                        pr[cur->src1.u.offset],
+                        -cur->dest.u.offset);
+                } else {
+                    // local-to-local pointer move
+                    fprintf(f,
+                        "\tmovq\t%d(%%rbp), %%rax\n"
+                        "\tmovq\t%%rax, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        -cur->dest.u.offset);
+                }
+            } else {
+                // existing 32-bit integer assignment path:
+                if (cur->src1.region == R_IMMED) {
+                    fprintf(f,
+                        "\tmovl\t$%d, %d(%%rbp)\n",
+                        cur->src1.u.offset,
+                        -cur->dest.u.offset);
+                } else if (cur->src1.region == R_PARAM) {
+                    static const char *p[6] = {"%edi","%esi","%edx","%ecx","%r8d","%r9d"};
+                    fprintf(f,
+                        "\tmovl\t%s, %d(%%rbp)\n",
+                        p[cur->src1.u.offset],
+                        -cur->dest.u.offset);
+                } else {
+                    fprintf(f,
+                        "\tmovl\t%d(%%rbp), %%eax\n"
+                        "\tmovl\t%%eax, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        -cur->dest.u.offset);
+                }
+            }
+          break;
 
           case O_ADDR:
             fprintf(f,
@@ -1629,28 +1667,39 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             break;
 
             case O_IADD:
-            if (cur->src2.region == R_IMMED) {
-                // add a constant
-                fprintf(f,
-                    "\tmovl\t%d(%%rbp), %%eax\n"
-                    "\taddl\t$%d, %%eax\n"
-                    "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,    // load lhs
-                     cur->src2.u.offset,    // immediate constant
-                    -cur->dest.u.offset     // store result
-                );
-            } else {
-                // add two stack slots
-                fprintf(f,
-                    "\tmovl\t%d(%%rbp), %%eax\n"
-                    "\taddl\t%d(%%rbp), %%eax\n"
-                    "\tmovl\t%%eax, %d(%%rbp)\n",
-                    -cur->src1.u.offset,
-                    -cur->src2.u.offset,
-                    -cur->dest.u.offset
-                );
-            }
-            break;
+                if (cur->is_ptr) {
+                    fprintf(f,
+                        "\tmovq\t-%d(%%rbp), %%rax\n"     // rax = basePtr
+                        "\tmovslq\t-%d(%%rbp), %%rcx\n"   // rcx = sign-extend 32-bit offset
+                        "\taddq\t%%rcx, %%rax\n"         // rax += rcx
+                        "\tmovq\t%%rax, -%d(%%rbp)\n",    // store result into addrTemp
+                        cur->src1.u.offset,              // basePtr slot
+                        cur->src2.u.offset,              // offsetBytes slot
+                        cur->dest.u.offset               // addrTemp slot
+                    );
+                }
+                else if (cur->src2.region == R_IMMED) {
+                    // integer add with immediate
+                    fprintf(f,
+                        "\tmovl\t%d(%%rbp), %%eax\n"
+                        "\taddl\t$%d, %%eax\n"
+                        "\tmovl\t%%eax, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        cur->src2.u.offset,
+                        -cur->dest.u.offset
+                    );
+                } else {
+                    // integer add two locals
+                    fprintf(f,
+                        "\tmovl\t%d(%%rbp), %%eax\n"
+                        "\taddl\t%d(%%rbp), %%eax\n"
+                        "\tmovl\t%%eax, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        -cur->src2.u.offset,
+                        -cur->dest.u.offset
+                    );
+                }
+                break;
         
         case O_ISUB:
             if (cur->src2.region == R_IMMED) {
@@ -1677,15 +1726,29 @@ void write_asm_file(const char *input_filename, struct instr *code) {
             break;
         
 
-          case O_IMUL:
-            fprintf(f,
-                "\tmovl\t%d(%%rbp), %%eax\n"
-                "\timull\t%d(%%rbp), %%eax\n"
-                "\tmovl\t%%eax, %d(%%rbp)\n",
-               -cur->src1.u.offset,
-               -cur->src2.u.offset,
-               -cur->dest.u.offset);
-            break;
+            case O_IMUL:
+                if (cur->src2.region == R_IMMED) {
+                    // multiply a local by an immediate
+                    fprintf(f,
+                        "\tmovl\t%d(%%rbp), %%eax\n"   // load src1
+                        "\timull\t$%d, %%eax\n"        // multiply by imm
+                        "\tmovl\t%%eax, %d(%%rbp)\n",  // store into dest
+                        -cur->src1.u.offset,
+                        cur->src2.u.offset,
+                        -cur->dest.u.offset
+                    );
+                } else {
+                    // multiply two locals
+                    fprintf(f,
+                        "\tmovl\t%d(%%rbp), %%eax\n"
+                        "\timull\t%d(%%rbp), %%eax\n"
+                        "\tmovl\t%%eax, %d(%%rbp)\n",
+                        -cur->src1.u.offset,
+                        -cur->src2.u.offset,
+                        -cur->dest.u.offset
+                    );
+                }
+                break;
 
           case O_IDIV:
             fprintf(f,
