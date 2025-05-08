@@ -1,0 +1,48 @@
+.string
+.data
+/* global variable declarations */
+
+.code
+COS       main              none:0            none:0          
+TAN       label:0           main              none:0          
+ALLOC     none:0            immed:176         none:0          
+LCONT     local:88          immed:0           none:0          
+ASN       local:8           local:88          none:0          
+LCONT     local:96          immed:1           none:0          
+ASN       local:16          local:96          none:0          
+glob      local:104         local:8           none:0          
+ASN       local:24          local:104         none:0          
+proc      local:112         local:8           local:16        
+ASN       local:32          local:112         none:0          
+loc       local:120         local:8           local:16        
+ASN       local:40          local:120         none:0          
+lab       local:128         local:8           local:16        
+ASN       local:48          local:128         none:0          
+end       local:136         local:16          none:0          
+ASN       local:56          local:136         none:0          
+prot      local:144         local:16          none:0          
+ASN       local:64          local:144         none:0          
+(null)    local:152         local:16          none:0          
+ASN       local:72          local:152         none:0          
+%rdi      none:0            none:0            none:0          
+(null)    local:160         none:0            none:0          
+ASN       local:80          local:160         none:0          
+PARM      none:0            local:80          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:24          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:32          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:40          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:48          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:56          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:64          none:0          
+CALL      none:0            println           none:0          
+PARM      none:0            local:72          none:0          
+CALL      none:0            println           none:0          
+DEALLOC   none:0            immed:176         none:0          
+RETURN    none:0            none:0            none:0          
+(null)    label:0           main              none:0          

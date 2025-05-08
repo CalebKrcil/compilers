@@ -549,11 +549,13 @@ void check_semantics_helper(struct tree *t, SymbolTable current_scope) {
         //        lhs->lineno);
     
         if (!(lhs->symbolname && (strcmp(lhs->symbolname, "variableDeclaration") == 0 ||
-                                   strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
-            if (!lhs->is_mutable) {
+        strcmp(lhs->symbolname, "constVariableDeclaration") == 0))) {
+            SymbolTableEntry entry = lookup_symbol(currentFunctionSymtab, lhs->leaf->text);
+            if (entry && !entry->mutable) {
                 report_semantic_error("Assignment to immutable variable", lhs->lineno);
             }
         }
+
         if (!lhs->is_nullable && is_null_literal(rhs)) {
             report_semantic_error("Assignment of null to non-nullable variable", lhs->lineno);
         }

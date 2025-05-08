@@ -70,7 +70,7 @@ static void finish_and_emit(const char *stem, bool emit_asm, bool emit_obj) {
         fprintf(stderr, "error: command line too long\n");
         exit(1);
     }
-    snprintf(cmd, sizeof cmd, "cc %s -o %s", ofile, stem);
+    snprintf(cmd, sizeof cmd, "cc %s -lm -o %s", ofile, stem);
     if (system(cmd) != 0) {
         fprintf(stderr, "error: linker failed\n");
         exit(1);
