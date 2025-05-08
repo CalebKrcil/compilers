@@ -1816,10 +1816,10 @@ void write_asm_file(const char *input_filename, struct instr *code) {
               }
               // store a local‐to‐heap int
               else {
-                  fprintf(f,
-                      "\tmovl\t-%d(%%rbp), %%eax\n"
-                      "\tmovl\t%%eax, (%%rax)\n",
-                      cur->src1.u.offset);
+                fprintf(f,
+                     "\tmovl\t-%d(%%rbp), %%ecx\n"
+                     "\tmovl\t%%ecx,(%%rax)\n",
+                     cur->src1.u.offset);
               }
               break;
           }
